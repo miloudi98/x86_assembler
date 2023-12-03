@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <utility>
 #include <optional>
 #include <source_location>
 #include <fmt/format.h>
@@ -89,5 +90,11 @@ template <typename... Args>
 Assert(bool assertion, fmt::format_string<Args...> fmt, Args&&... args) -> Assert<Args...>;
 
 }  // namespace dbg
+
+template <typename E> 
+requires std::is_enum_v<E>
+constexpr auto operator+(E e) -> std::underlying_type_t<E> {
+    return std::to_underlying(e);
+}
 
 #endif  // __X86_ASSEMBLER_LIB_UTILS_HH__
