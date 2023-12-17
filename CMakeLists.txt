@@ -51,7 +51,7 @@ add_library(x86_assembler STATIC ${x86_assembler_sources})
 
 target_include_directories(x86_assembler PUBLIC "${PROJECT_SOURCE_DIR}/")
 target_include_directories(x86_assembler PUBLIC "${libfmt_SOURCE_DIR}/include")
-target_link_libraries(x86_assembler PUBLIC fmt GTest::gtest_main)
+target_link_libraries(x86_assembler PUBLIC fmt)
 
 target_compile_options(x86_assembler PUBLIC
 	-Wall -Wextra					 # Enable ‘all’ warnings.
@@ -106,3 +106,16 @@ target_link_options(x86_assembler PUBLIC
 add_executable(x86_assembler_driver "${PROJECT_SOURCE_DIR}/exec/main.cc")
 set_target_properties(x86_assembler_driver PROPERTIES OUTPUT_NAME "fiskaas")
 target_link_libraries(x86_assembler_driver PRIVATE x86_assembler)
+
+## ============================================================================
+## Testing
+## ============================================================================
+enable_testing()
+include(GoogleTest)
+
+add_executable(tests 
+    "${PROJECT_SOURCE_DIR}/tests/mov_test.cc")
+
+target_link_libraries(tests x86_assembler GTest::gtest_main GTest::gmock_main)
+
+gtest_discover_tests(tests)

@@ -24,9 +24,13 @@ enum struct Patch_Opcode : bool {
 
 union Rex {
     struct {
+        // Mod_Rm::r/m or Sib::Base extension.
         u8 b: 1;
+        // Sib::Index extension.
         u8 x: 1;
+        // Mod_Rm::reg extension.
         u8 r: 1;
+        // Operand size override.
         u8 w: 1;
         u8 mod: 4 {0b0100}; 
     };
@@ -110,6 +114,8 @@ struct Operand {
     >;
     Inner inner{};
 
+    Operand(Inner op) : inner(op) {}
+
     auto IsRegister() const -> bool { return std::holds_alternative<Register>(inner); }
     auto IsMemRef() const -> bool { return std::holds_alternative<Mem_Ref>(inner); }
     auto IsRegisterOrMemRef() const -> bool { return IsRegister() or IsMemRef(); }
@@ -122,25 +128,6 @@ struct Operand {
 
     template <typename T>
     auto As() const -> const T& { return std::get<T>(inner); }
-
-    auto UpdateRex(Rex& rex, Patch_Opcode patch_opcode = Patch_Opcode::No) const -> void {
-        if (IsRegister()) {
-            rex.w = As<Register>().size == Bit_Width::B64;
-            rex.b = rex.r or +patch_opcode;
-            rex.r = not rex.r and not +patch_opcode;
-
-        } else if (IsMemRef()) {
-            rex.w = As<Mem_Ref>().size == Bit_Width::B64;
-            rex.b = As<Mem_Ref>().base.has_value() and As<Mem_Ref>().base->RequiresExtension();
-            rex.x = As<Mem_Ref>().index.has_value() and As<Mem_Ref>().index->RequiresExtension();
-
-        } else {
-            dbg::Assert(false,
-                    "Attempting to update the Rex prefix using an operand "
-                    "that isn't a Register or a Mem_Ref!");
-        }
-    }
-
 };
 
 
@@ -212,8 +199,10 @@ struct Mod_Rm_Builder {
             case Mem_Ref::Kind::Invalid: {
                 dbg::Assert(false, "Unreachable!");
             }
-
             } // switch
+
+            // should never be reached.
+            std::terminate();
         }();
         return *this;
     }
@@ -261,6 +250,9 @@ struct Mod_Rm_Builder {
             case Mem_Ref::Kind::Invalid:
                 dbg::Assert(false, "Unreachable!");
             } // switch
+
+            // should never be reached.
+            std::terminate();
         }();
 
         // The trailing return type helps the compiler implicitely cast the
@@ -293,6 +285,9 @@ struct Mod_Rm_Builder {
             case Mem_Ref::Kind::Invalid:
                 dbg::Assert(false, "Unreachable!");
             } // switch
+
+            // should never be reached.
+            std::terminate();
         }();
 
         return *this;
@@ -353,7 +348,7 @@ struct Assembler {
         out.push_back((qword >> 32) & 0xff);
         out.push_back((qword >> 40) & 0xff);
         out.push_back((qword >> 48) & 0xff);
-        out.push_back((qword >> 54) & 0xff);
+        out.push_back((qword >> 56) & 0xff);
     }
     
     auto EmitSized(u64 qword, Bit_Width size) -> void {
@@ -379,18 +374,17 @@ struct Assembler {
 
     auto mov(const Operand& dst, const Operand& src) -> void {
         // MOV r/m, r
-        // MOV r, r/m
-        if (dst.IsRegisterOrMemRef() and src.IsRegisterOrMemRef()) {
-            u8 op_code = [&] {
-                if (dst.IsRegisterOrMemRef() and src.IsRegister()) {
-                    return u8(0x89 - (src.As<Register>().size == Bit_Width::B8)); 
-                }
-                return u8(0x8b - (dst.As<Register>().size == Bit_Width::B8));
-            }();
+        if (dst.IsRegisterOrMemRef() and src.IsRegister()) {
+            u8 op_code = 0x89 - (src.As<Register>().size == Bit_Width::B8);
 
-            Rex rex;
-            dst.UpdateRex(rex);
-            src.UpdateRex(rex);
+            Rex rex {
+                .b = dst.IsMemRef() 
+                    ? dst.As<Mem_Ref>().base.has_value() and dst.As<Mem_Ref>().base->RequiresExtension()
+                    : dst.As<Register>().RequiresExtension(),
+                .x = dst.IsMemRef() and dst.As<Mem_Ref>().index.has_value() and dst.As<Mem_Ref>().index->RequiresExtension(),
+                .r = src.As<Register>().RequiresExtension(),
+                .w = src.As<Register>().size == Bit_Width::B64
+            };
 
             auto mod_rm_builder = Mod_Rm_Builder()
                 .SetMod(dst, src)
@@ -402,6 +396,8 @@ struct Assembler {
             Emit8(mod_rm_builder.AsU8());
             if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
 
+            // FIXME: This logic is shared with the branch underneath. Try to refactor
+            // this into a function.
             switch (u8(mod_rm_builder.mod_rm.mod)) {
             case Mod_Rm_Builder::kMod_Mem_Transfer: {
                 const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
@@ -415,11 +411,63 @@ struct Assembler {
                 break;
             }
             case Mod_Rm_Builder::kMod_Mem_Disp8_Transfer: {
-                Emit8(static_cast<u8>(dst.As<Mem_Ref>().disp.value()));
+                Emit8(static_cast<u8>(dst.As<Mem_Ref>().disp.value_or(0)));
                 break;
             }
             case Mod_Rm_Builder::kMod_Mem_Disp32_Transfer: {
-                Emit32(static_cast<u32>(dst.As<Mem_Ref>().disp.value()));
+                Emit32(static_cast<u32>(dst.As<Mem_Ref>().disp.value_or(0)));
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Reg_Transfer: {
+                // No displacement to emit.
+                break;
+            }
+            default:
+                dbg::Assert(false, "Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
+                        u8(mod_rm_builder.mod_rm.mod));
+            } // switch
+        }
+        // MOV r, r/m
+        else if (dst.IsRegister() and src.IsRegisterOrMemRef()) {
+            u8 op_code = 0x8b - (dst.As<Register>().size == Bit_Width::B8);
+
+            Rex rex {
+                .b = src.IsMemRef() 
+                    ? src.As<Mem_Ref>().base.has_value() and src.As<Mem_Ref>().base->RequiresExtension()
+                    : src.As<Register>().RequiresExtension(),
+                .x = src.IsMemRef() and src.As<Mem_Ref>().index.has_value() and src.As<Mem_Ref>().index->RequiresExtension(),
+                .r = dst.As<Register>().RequiresExtension(),
+                .w = dst.As<Register>().size == Bit_Width::B64
+            };
+
+            auto mod_rm_builder = Mod_Rm_Builder()
+                .SetMod(dst, src)
+                .SetRmAndSib(src)
+                .SetReg(dst);
+
+            if (rex.IsRequired()) { Emit8(rex.raw); }
+            Emit8(op_code);
+            Emit8(mod_rm_builder.AsU8());
+            if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
+
+            switch (u8(mod_rm_builder.mod_rm.mod)) {
+            case Mod_Rm_Builder::kMod_Mem_Transfer: {
+                const Mem_Ref& mem_ref = src.As<Mem_Ref>();
+
+                // If Rip is the base of a memory reference then it is required to have
+                // a 32-bit displacement following the Mod_Rm and Sib byte.
+                if (mem_ref.base.has_value() 
+                        and mem_ref.base->id == Register::Id::Rip) {
+                    Emit32(u32(mem_ref.disp.value_or(0)));
+                }
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Mem_Disp8_Transfer: {
+                Emit8(static_cast<u8>(src.As<Mem_Ref>().disp.value_or(0)));
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Mem_Disp32_Transfer: {
+                Emit32(static_cast<u32>(src.As<Mem_Ref>().disp.value_or(0)));
                 break;
             }
             case Mod_Rm_Builder::kMod_Reg_Transfer: {
@@ -436,35 +484,44 @@ struct Assembler {
         // MOV rax, moffs
         // MOV moffs, rax
         else if ((dst.IsRegister() and src.IsMoffs()) or (dst.IsMoffs() and src.IsRegister())) {
-            const Operand& reg_op = src.IsRegister() ? src : dst;
-            const Operand& moffs_op = src.IsMoffs() ? src : dst;
+            const Register& reg = src.IsRegister() ? src.As<Register>() : dst.As<Register>();
+            const M_Offs& moffs = src.IsMoffs() ? src.As<M_Offs>() : dst.As<M_Offs>();
 
             u8 op_code = [&] {
                 if (dst.IsRegister()) {
-                    return u8(0xa1 - (dst.As<Register>().size == Bit_Width::B8));
+                    return u8(0xa1 - (reg.size == Bit_Width::B8));
                 }
-                return u8(0xa3 - (src.As<Register>().size == Bit_Width::B8));
+                return u8(0xa3 - (reg.size == Bit_Width::B8));
             }();
 
-            Rex rex;
-            reg_op.UpdateRex(rex);
+            Rex rex {
+                .b = 0,
+                .x = 0,
+                .r = 0,
+                .w = reg.size == Bit_Width::B64
+            };
 
             if (rex.IsRequired()) { Emit8(rex.raw); }
             Emit8(op_code);
-            Emit64(u64(moffs_op.As<M_Offs>().ToI64()));
+            Emit64(u64(moffs.ToI64()));
         }
 
         // MOV r, imm
         else if (dst.IsRegister() and src.IsImm()) {
-            u8 op_code = dst.As<Register>().size == Bit_Width::B8
-                ? 0xb0 : 0xb8;
+            u8 op_code = dst.As<Register>().size == Bit_Width::B8 ? 0xb0 : 0xb8;
 
-            Rex rex;
-            dst.UpdateRex(rex, Patch_Opcode::Yes);
+            Rex rex {
+                .b = dst.As<Register>().RequiresExtension(),
+                .x = 0,
+                .r = 0,
+                .w = dst.As<Register>().size == Bit_Width::B64
+            };
 
             // Implementation of the +rb part of the opcode.
             op_code |= dst.As<Register>().Index();
 
+            if (rex.IsRequired()) { Emit8(rex.raw); }
+            Emit8(op_code);
             EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Register>().size);
         }
 
@@ -472,11 +529,17 @@ struct Assembler {
         else if (dst.IsMemRef() and src.IsImm()) {
             u8 op_code = 0xc7 - (dst.As<Mem_Ref>().size == Bit_Width::B8);
 
-            Rex rex;
-            dst.UpdateRex(rex);
+            const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
+
+            Rex rex {
+                .b = mem_ref.base.has_value() and mem_ref.base->RequiresExtension(),
+                .x = mem_ref.index.has_value() and mem_ref.index->RequiresExtension(),
+                .r = 0,
+                .w = mem_ref.size == Bit_Width::B64
+            };
 
             auto mod_rm_builder = Mod_Rm_Builder()
-                .SetMod(dst.As<Mem_Ref>())
+                .SetMod(mem_ref)
                 .SetRmAndSib(dst)
                 .SetReg(0);
 
@@ -485,6 +548,9 @@ struct Assembler {
             Emit8(mod_rm_builder.AsU8());
             if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
             EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Mem_Ref>().size);
+        }
+        else {
+            dbg::Assert(false, "Unreachable!");
         }
     }
 };

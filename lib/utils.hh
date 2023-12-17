@@ -42,15 +42,19 @@ namespace dbg {
 
 auto PrintStackTrace() -> void;
 
+// FIXME: Replace the Assertion machinery with a macro. It's cleaner
+// that way.
 // Assertion helpers
 template <typename... Args>
 struct Assert {
-    explicit Assert(bool assertion,
-            std::source_location loc = std::source_location::current())
+    explicit Assert(std::source_location loc,
+            bool assertion,
+            fmt::format_string<Args...> fmt,
+            Args&&... args)
     {
-        Assert(assertion, "", loc);
+        // TODO: think about this overload to implement something like
+        // dbg::Unreachable();
     }
-
     explicit Assert(bool assertion,
             fmt::format_string<Args...> fmt,
             Args&&... args,
