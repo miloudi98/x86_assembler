@@ -460,7 +460,7 @@ struct Assembler {
                 ? 0xb0 : 0xb8;
 
             Rex rex;
-            dst.UpdateRex(rex);
+            dst.UpdateRex(rex, Patch_Opcode::Yes);
 
             // Implementation of the +rb part of the opcode.
             op_code |= dst.As<Register>().Index();
