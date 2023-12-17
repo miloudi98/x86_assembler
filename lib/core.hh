@@ -17,6 +17,24 @@ enum struct Bit_Width : i32 {
     B64 = 64
 };
 
+enum struct Patch_Opcode : bool {
+    No = 0,
+    Yes = 1,
+};
+
+union Rex {
+    struct {
+        u8 b: 1;
+        u8 x: 1;
+        u8 r: 1;
+        u8 w: 1;
+        u8 mod: 4 {0b0100}; 
+    };
+    u8 raw;
+
+    auto IsRequired() const -> bool { return b or x or r or w; }
+};
+
 struct Register {
     enum struct Id : i32 {
         Invalid = -1,
@@ -29,9 +47,9 @@ struct Register {
         Rbp = 5, R13 = 13,
         Rsi = 6, R14 = 14,
         Rdi = 7, R15 = 15,
-        // The value 0x85 was given so that Rip.Index() returns 101.
-        // This is needed when rip is the base of a memory reference.
-        // the top bit is set to 1 just to differentiate it from other registers.
+        // The value 0x85 is intentionally selected to ensure that Rip.Index() returns 101.
+        // This is needed when rip serves as a base in a memory reference.
+        // Setting the top bit of the second byte to 1 helps distinguish it from other registers.
         Rip = 0x85,
     };
 
@@ -68,20 +86,21 @@ struct Mem_Ref {
     Bit_Width size = Bit_Width::Invalid;
 };
 
+struct M_Offs {
+    i64 inner{};
+
+    M_Offs(i64 moffs) : inner(moffs) {}
+
+    auto ToI64() const -> i64 { return inner; }
+};
+struct Imm {
+    i64 inner{};
+
+    Imm(i64 imm) : inner(imm) {}
+    auto ToI64() const -> i64 { return inner; }
+};
+
 struct Operand {
-    struct M_Offs {
-        i64 inner{};
-
-        M_Offs(i64 moffs) : inner(moffs) {}
-
-        auto ToI64() const -> i64 { return inner; }
-    };
-    struct Imm {
-        i64 inner{};
-
-        Imm(i64 imm) : inner(imm) {}
-        auto ToI64() const -> i64 { return inner; }
-    };
     using Inner = std::variant<
         std::monostate,
         Register,
@@ -99,57 +118,31 @@ struct Operand {
 
 
     template <typename T>
-    auto as() -> T& { return std::get<T>(inner); }
+    auto As() -> T& { return std::get<T>(inner); }
 
     template <typename T>
-    auto as() const -> const T& { return std::get<T>(inner); }
+    auto As() const -> const T& { return std::get<T>(inner); }
+
+    auto UpdateRex(Rex& rex, Patch_Opcode patch_opcode = Patch_Opcode::No) const -> void {
+        if (IsRegister()) {
+            rex.w = As<Register>().size == Bit_Width::B64;
+            rex.b = rex.r or +patch_opcode;
+            rex.r = not rex.r and not +patch_opcode;
+
+        } else if (IsMemRef()) {
+            rex.w = As<Mem_Ref>().size == Bit_Width::B64;
+            rex.b = As<Mem_Ref>().base.has_value() and As<Mem_Ref>().base->RequiresExtension();
+            rex.x = As<Mem_Ref>().index.has_value() and As<Mem_Ref>().index->RequiresExtension();
+
+        } else {
+            dbg::Assert(false,
+                    "Attempting to update the Rex prefix using an operand "
+                    "that isn't a Register or a Mem_Ref!");
+        }
+    }
 
 };
 
-struct Assembler {
-    Vec<u8> out;
-
-    auto EmitU8(u8 byte) -> void {
-        out.push_back(byte);
-    }
-
-    auto EmitU16(u16 word) -> void {
-        // u8(...) to fix Wconversion warning.
-        out.push_back(u8((word >> 0) & 0xff));
-        out.push_back(u8((word >> 8) & 0xff));
-    }
-
-    auto EmitU32(u32 dword) -> void {
-        // u8(...) to fix Wconversion warning.
-        out.push_back(u8((dword >> 0) & 0xff));
-        out.push_back(u8((dword >> 8) & 0xff));
-        out.push_back(u8((dword >> 16) & 0xff));
-        out.push_back(u8((dword >> 24) & 0xff));
-    }
-
-    auto EmitU64(u64 qword) -> void {
-        // u8(...) to fix Wconversion warning.
-        out.push_back(u8((qword >> 0) & 0xff));
-        out.push_back(u8((qword >> 8) & 0xff));
-        out.push_back(u8((qword >> 16) & 0xff));
-        out.push_back(u8((qword >> 24) & 0xff));
-        out.push_back(u8((qword >> 32) & 0xff));
-        out.push_back(u8((qword >> 40) & 0xff));
-        out.push_back(u8((qword >> 48) & 0xff));
-        out.push_back(u8((qword >> 54) & 0xff));
-    }
-};
-
-union Rex {
-    struct {
-        u8 b: 1;
-        u8 x: 1;
-        u8 r: 1;
-        u8 w: 1;
-        u8 mod: 4 {0b0100}; 
-    };
-    u8 raw;
-};
 
 struct Mod_Rm_Builder {
     static constexpr u8 kMod_Mem_Transfer = 0b00;
@@ -183,18 +176,8 @@ struct Mod_Rm_Builder {
     Opt<Sib> sib = std::nullopt;
 
     GCC_DIAG_IGNORE_PUSH(-Wconversion)
-    auto SetMod(const Operand& dst, const Operand& src) -> Mod_Rm_Builder& {
-        dbg::Assert(dst.IsRegisterOrMemRef() and src.IsRegisterOrMemRef(),
-                "|dst| or |src| is neither a Register nor a Mem_Ref");
-
-        if (dst.IsRegister() and src.IsRegister()) {
-            mod_rm.mod = kMod_Reg_Transfer;
-            return *this;
-        }
-
+    auto SetMod(const Mem_Ref& mem_ref) -> Mod_Rm_Builder& {
         mod_rm.mod = [&] {
-            const Mem_Ref& mem_ref = dst.IsMemRef() ? dst.as<Mem_Ref>() : src.as<Mem_Ref>();
-
             auto ModBasedOnDisp = [&](i64 disp) {
                 return utils::FitsInU8(disp) 
                     ? kMod_Mem_Disp8_Transfer
@@ -236,6 +219,18 @@ struct Mod_Rm_Builder {
     }
     GCC_DIAG_IGNORE_POP();
 
+    auto SetMod(const Operand& dst, const Operand& src) -> Mod_Rm_Builder& {
+        dbg::Assert(dst.IsRegisterOrMemRef() and src.IsRegisterOrMemRef(),
+                "|dst| or |src| are neither a Register nor a Mem_Ref");
+
+        if (dst.IsRegister() and src.IsRegister()) {
+            mod_rm.mod = kMod_Reg_Transfer;
+            return *this;
+        }
+
+        return SetMod(dst.IsMemRef() ? dst.As<Mem_Ref>() : src.As<Mem_Ref>());
+    }
+
     GCC_DIAG_IGNORE_PUSH(-Wconversion)
     auto SetRmAndSib(const Operand& op) -> Mod_Rm_Builder& {
         dbg::Assert(op.IsRegisterOrMemRef(), 
@@ -243,12 +238,12 @@ struct Mod_Rm_Builder {
                 "to set the r/m and sib fields.");
 
         if (op.IsRegister()) {
-            mod_rm.rm = op.as<Register>().Index();
+            mod_rm.rm = op.As<Register>().Index();
 
             return *this;
         }
 
-        const Mem_Ref& mem_ref = op.as<Mem_Ref>();
+        const Mem_Ref& mem_ref = op.As<Mem_Ref>();
         
         mod_rm.rm = [&] {
             switch (mem_ref.kind) {
@@ -274,6 +269,15 @@ struct Mod_Rm_Builder {
         sib = [&] -> Opt<Sib> {
             switch (mem_ref.kind) {
             case Mem_Ref::Kind::Base_Maybe_Disp: {
+                if (mem_ref.base.value().id == Register::Id::Rsp
+                        or mem_ref.base.value().id == Register::Id::R12)
+                {
+                    return Sib {
+                        .base = mem_ref.base.value().Index(),
+                        .index = kNo_Scaled_Index,
+                        .scale = +Mem_Ref::Scale::Zero
+                    };
+                }
                 return std::nullopt;
             }
             case Mem_Ref::Kind::Base_Index_Maybe_Disp:
@@ -301,7 +305,16 @@ struct Mod_Rm_Builder {
                 "Passing an operand that is not a Register to the Mod_Rm_Builder "
                 "to set the reg field");
 
-        mod_rm.reg = op.as<Register>().Index();
+        mod_rm.reg = op.As<Register>().Index();
+        return *this;
+    }
+    GCC_DIAG_IGNORE_POP();
+
+    GCC_DIAG_IGNORE_PUSH(-Wconversion)
+    auto SetReg(u8 value) -> Mod_Rm_Builder& {
+        dbg::Assert(value <= 0b111,
+                "Attempting to assign a number bigger than 0b111 to a 3-bit field in the Mod_Rm.");
+        mod_rm.reg = value;
         return *this;
     }
     GCC_DIAG_IGNORE_POP();
@@ -311,6 +324,171 @@ struct Mod_Rm_Builder {
     // Function specifiying the of casting the Mod_Rm_Builder to a u8.
     operator u8() const { return mod_rm.raw; }
 };
+
+struct Assembler {
+    Vec<u8> out;
+
+    GCC_DIAG_IGNORE_PUSH(-Wconversion)
+    auto Emit8(u8 byte) -> void {
+        out.push_back(byte);
+    }
+
+    auto Emit16(u16 word) -> void {
+        out.push_back((word >> 0) & 0xff);
+        out.push_back((word >> 8) & 0xff);
+    }
+
+    auto Emit32(u32 dword) -> void {
+        out.push_back((dword >> 0) & 0xff);
+        out.push_back((dword >> 8) & 0xff);
+        out.push_back((dword >> 16) & 0xff);
+        out.push_back((dword >> 24) & 0xff);
+    }
+
+    auto Emit64(u64 qword) -> void {
+        out.push_back((qword >> 0) & 0xff);
+        out.push_back((qword >> 8) & 0xff);
+        out.push_back((qword >> 16) & 0xff);
+        out.push_back((qword >> 24) & 0xff);
+        out.push_back((qword >> 32) & 0xff);
+        out.push_back((qword >> 40) & 0xff);
+        out.push_back((qword >> 48) & 0xff);
+        out.push_back((qword >> 54) & 0xff);
+    }
+    
+    auto EmitSized(u64 qword, Bit_Width size) -> void {
+        switch (size) {
+        case Bit_Width::B8:
+            Emit8(static_cast<u8>(qword));
+            break;
+        case Bit_Width::B16:
+            Emit16(static_cast<u16>(qword));
+            break;
+        case Bit_Width::B32:
+            Emit32(static_cast<u32>(qword));
+            break;
+        case Bit_Width::B64:
+            Emit64(static_cast<u64>(qword));
+            break;
+
+        case Bit_Width::Invalid:
+            dbg::Assert(false, "Unreachable!");
+        } // switch
+    }
+    GCC_DIAG_IGNORE_POP();
+
+    auto mov(const Operand& dst, const Operand& src) -> void {
+        // MOV r/m, r
+        // MOV r, r/m
+        if (dst.IsRegisterOrMemRef() and src.IsRegisterOrMemRef()) {
+            u8 op_code = [&] {
+                if (dst.IsRegisterOrMemRef() and src.IsRegister()) {
+                    return u8(0x89 - (src.As<Register>().size == Bit_Width::B8)); 
+                }
+                return u8(0x8b - (dst.As<Register>().size == Bit_Width::B8));
+            }();
+
+            Rex rex;
+            dst.UpdateRex(rex);
+            src.UpdateRex(rex);
+
+            auto mod_rm_builder = Mod_Rm_Builder()
+                .SetMod(dst, src)
+                .SetRmAndSib(dst)
+                .SetReg(src);
+
+            if (rex.IsRequired()) { Emit8(rex.raw); }
+            Emit8(op_code);
+            Emit8(mod_rm_builder.AsU8());
+            if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
+
+            switch (u8(mod_rm_builder.mod_rm.mod)) {
+            case Mod_Rm_Builder::kMod_Mem_Transfer: {
+                const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
+
+                // If Rip is the base of a memory reference then it is required to have
+                // a 32-bit displacement following the Mod_Rm and Sib byte.
+                if (mem_ref.base.has_value() 
+                        and mem_ref.base->id == Register::Id::Rip) {
+                    Emit32(u32(mem_ref.disp.value_or(0)));
+                }
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Mem_Disp8_Transfer: {
+                Emit8(static_cast<u8>(dst.As<Mem_Ref>().disp.value()));
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Mem_Disp32_Transfer: {
+                Emit32(static_cast<u32>(dst.As<Mem_Ref>().disp.value()));
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Reg_Transfer: {
+                // No displacement to emit.
+                break;
+            }
+            default:
+                dbg::Assert(false, "Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
+                        u8(mod_rm_builder.mod_rm.mod));
+            } // switch
+
+        }
+
+        // MOV rax, moffs
+        // MOV moffs, rax
+        else if ((dst.IsRegister() and src.IsMoffs()) or (dst.IsMoffs() and src.IsRegister())) {
+            const Operand& reg_op = src.IsRegister() ? src : dst;
+            const Operand& moffs_op = src.IsMoffs() ? src : dst;
+
+            u8 op_code = [&] {
+                if (dst.IsRegister()) {
+                    return u8(0xa1 - (dst.As<Register>().size == Bit_Width::B8));
+                }
+                return u8(0xa3 - (src.As<Register>().size == Bit_Width::B8));
+            }();
+
+            Rex rex;
+            reg_op.UpdateRex(rex);
+
+            if (rex.IsRequired()) { Emit8(rex.raw); }
+            Emit8(op_code);
+            Emit64(u64(moffs_op.As<M_Offs>().ToI64()));
+        }
+
+        // MOV r, imm
+        else if (dst.IsRegister() and src.IsImm()) {
+            u8 op_code = dst.As<Register>().size == Bit_Width::B8
+                ? 0xb0 : 0xb8;
+
+            Rex rex;
+            dst.UpdateRex(rex);
+
+            // Implementation of the +rb part of the opcode.
+            op_code |= dst.As<Register>().Index();
+
+            EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Register>().size);
+        }
+
+        // MOV r/m, imm
+        else if (dst.IsMemRef() and src.IsImm()) {
+            u8 op_code = 0xc7 - (dst.As<Mem_Ref>().size == Bit_Width::B8);
+
+            Rex rex;
+            dst.UpdateRex(rex);
+
+            auto mod_rm_builder = Mod_Rm_Builder()
+                .SetMod(dst.As<Mem_Ref>())
+                .SetRmAndSib(dst)
+                .SetReg(0);
+
+            if (rex.IsRequired()) { Emit8(rex.raw); }
+            Emit8(op_code);
+            Emit8(mod_rm_builder.AsU8());
+            if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
+            EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Mem_Ref>().size);
+        }
+    }
+};
+
 
 }  // namespace fiska::core
 
