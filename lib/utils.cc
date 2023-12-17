@@ -1,5 +1,6 @@
 #include <string>
 #include <execinfo.h>
+#include <limits>
 
 #include "lib/utils.hh"
 
@@ -27,4 +28,9 @@ auto dbg::PrintStackTrace() -> void {
     }
 
     free(strings);
+}
+
+auto utils::FitsInU8(i64 num) -> bool {
+    dbg::Assert(num >= 0, "Tried to convert a negative integer to a u8");
+    return num <= std::numeric_limits<u8>::max();
 }

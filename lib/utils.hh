@@ -97,4 +97,20 @@ constexpr auto operator+(E e) -> std::underlying_type_t<E> {
     return std::to_underlying(e);
 }
 
+namespace utils {
+
+auto FitsInU8(i64 num) -> bool;
+
+}  // namespace utils
+
+// Helper macro to concatenate strings inside a _Pragma call.
+#define FISKA_PRAGMA_HELPER(x) _Pragma (#x)
+
+#define GCC_DIAG_IGNORE_PUSH(warning) \
+    _Pragma("GCC diagnostic push") \
+    FISKA_PRAGMA_HELPER(GCC diagnostic ignored #warning) \
+
+#define GCC_DIAG_IGNORE_POP() \
+    _Pragma("GCC diagnostic pop")
+
 #endif  // __X86_ASSEMBLER_LIB_UTILS_HH__
