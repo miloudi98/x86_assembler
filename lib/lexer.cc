@@ -101,7 +101,6 @@ auto Lexer::NextTok() -> Tok {
 
     switch (*c) {
     case ' ': {
-        NextChar();
         // This is probably dangerous. A long sequence of whitespaces 
         // may overflow the stack! Maybe TCO will come to the rescue?
         return NextTok();
