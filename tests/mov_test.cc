@@ -7,7 +7,7 @@
 namespace fiska::core {
 namespace assembler_test {
 
-struct AssemblerTest : public ::testing::Test {
+struct MovAssemblerTest : public ::testing::Test {
     Assembler as;
 
     auto Mov(const Operand::Inner& dst, const Operand::Inner& src) -> Vec<u8> {
@@ -22,6 +22,14 @@ constexpr Register rax {
     .id = Register::Id::Rax,
     .size = Bit_Width::B64
 };
+constexpr Register eax {
+    .id = Register::Id::Rax,
+    .size = Bit_Width::B32
+};
+constexpr Register al {
+    .id = Register::Id::Rax,
+    .size = Bit_Width::B8
+};
 constexpr Register rbx {
     .id = Register::Id::Rbx,
     .size = Bit_Width::B64
@@ -34,16 +42,12 @@ constexpr Register r12 {
     .id = Register::Id::R12,
     .size = Bit_Width::B64
 };
-constexpr Register eax {
-    .id = Register::Id::Rax,
-    .size = Bit_Width::B32
-};
 constexpr Register r8d {
     .id = Register::Id::R8,
     .size = Bit_Width::B32
 };
 
-TEST_F(AssemblerTest, Mov_Register_To_Register) {
+TEST_F(MovAssemblerTest, Mov_Register_To_Register) {
     // The dissasembly is taken from https://defuse.ca/online-x86-assembler.htm.
     // This is simply a smoke test for now. We will write more involved tests once
     // we have a parser ready. The parser is needed so that we can convert our 
@@ -58,7 +62,7 @@ TEST_F(AssemblerTest, Mov_Register_To_Register) {
     EXPECT_THAT(Mov(rbx, r8), ::testing::ElementsAreArray({0x4c, 0x89, 0xc3}));
 }
 
-TEST_F(AssemblerTest, Mov_Mem_Ref_To_Register) {
+TEST_F(MovAssemblerTest, Mov_Mem_Ref_To_Register) {
     Mem_Ref mem_ref_rsp {
         .kind = Mem_Ref::Kind::Base_Maybe_Disp,
         .base = static_cast<Opt<Register>>(Register::Id::Rsp),
@@ -104,12 +108,21 @@ TEST_F(AssemblerTest, Mov_Mem_Ref_To_Register) {
     EXPECT_THAT(Mov(rbx, mem_ref_rip_base), ::testing::ElementsAreArray({0x48, 0x8b, 0x1d, 0xef, 0xff, 0xff, 0xff}));
 }
 
-TEST_F(AssemblerTest, Mov_Imm_To_Reg) {
+TEST_F(MovAssemblerTest, Mov_Imm_To_Reg) {
     // The dissasembly is taken from https://defuse.ca/online-x86-assembler.htm.
     EXPECT_THAT(Mov(rax, Imm(0x1122334455667788)), ::testing::ElementsAreArray({0x48, 0xb8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11}));
     EXPECT_THAT(Mov(rax, Imm(-0x1122334455667788)), ::testing::ElementsAreArray({0x48, 0xb8, 0x78, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee}));
     EXPECT_THAT(Mov(rax, Imm(-0x1122334455667788)), ::testing::ElementsAreArray({0x48, 0xb8, 0x78, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee}));
     EXPECT_THAT(Mov(eax, Imm(0x11223344)), ::testing::ElementsAreArray({0xb8, 0x44, 0x33, 0x22, 0x11}));
+}
+
+TEST_F(MovAssemblerTest, Mov_Rax_Moffs) {
+    // The dissasembly is taken from https://defuse.ca/online-x86-assembler.htm.
+    EXPECT_THAT(Mov(rax, M_Offs(0x1122334455667788)), ::testing::ElementsAreArray({0x48, 0xa1, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11}));
+    EXPECT_THAT(Mov(eax, M_Offs(0x1122334455667788)), ::testing::ElementsAreArray({0xa1, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11}));
+    EXPECT_THAT(Mov(al, M_Offs(0x1122334455667788)), ::testing::ElementsAreArray({0xa0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11}));
+    EXPECT_THAT(Mov(M_Offs(0x1122334455667788), al), ::testing::ElementsAreArray({0xa2, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11}));
+
 }
 
 }  // namespace mov_testing 

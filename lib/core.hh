@@ -93,7 +93,10 @@ struct Mem_Ref {
 struct M_Offs {
     i64 inner{};
 
-    M_Offs(i64 moffs) : inner(moffs) {}
+    M_Offs(i64 moffs) : inner(moffs) {
+        dbg::Assert(moffs >= 0,
+                "Attempting to reference memory using a negative absolute address!");
+    }
 
     auto ToI64() const -> i64 { return inner; }
 };
@@ -368,8 +371,45 @@ struct Assembler {
     }
     GCC_DIAG_IGNORE_POP();
 
+    // Moving segment registers is not supported for now. We will implement it
+    // once the need for such an operation arises.
     auto mov(const Operand& dst, const Operand& src) -> void {
-        // MOV r/m, r
+
+        auto EmitMemRefDisp = [&](u8 mod_rm_mod, const Mem_Ref& mem_ref) {
+            switch (mod_rm_mod) {
+            case Mod_Rm_Builder::kMod_Mem_Transfer: {
+                // If Rip is the base of a memory reference then it is required to have
+                // a 32-bit displacement following the Mod_Rm and Sib byte.
+                if (mem_ref.base.has_value() 
+                        and mem_ref.base->id == Register::Id::Rip) {
+                    Emit32(u32(mem_ref.disp.value_or(0)));
+                }
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Mem_Disp8_Transfer: {
+                Emit8(static_cast<u8>(mem_ref.disp.value_or(0)));
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Mem_Disp32_Transfer: {
+                Emit32(static_cast<u32>(mem_ref.disp.value_or(0)));
+                break;
+            }
+            case Mod_Rm_Builder::kMod_Reg_Transfer: {
+                // No displacement to emit.
+                break;
+            }
+            default:
+                dbg::Unreachable(
+                        "Encountered an unknown mod when setting the mod field "
+                        "of the Mod_Rm: '{}'.", mod_rm_mod);
+            } // switch 
+        };
+
+        // Instructions encoded:
+        // MOV r/m8, r8
+        // MOV r/m16, r16
+        // MOV r/m32, r32
+        // MOV r/m64, r64
         if (dst.IsRegisterOrMemRef() and src.IsRegister()) {
             u8 op_code = 0x89 - (src.As<Register>().size == Bit_Width::B8);
 
@@ -392,38 +432,14 @@ struct Assembler {
             Emit8(mod_rm_builder.AsU8());
             if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
 
-            // FIXME: This logic is shared with the branch underneath. Try to refactor
-            // this into a function.
-            switch (u8(mod_rm_builder.mod_rm.mod)) {
-            case Mod_Rm_Builder::kMod_Mem_Transfer: {
-                const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
-
-                // If Rip is the base of a memory reference then it is required to have
-                // a 32-bit displacement following the Mod_Rm and Sib byte.
-                if (mem_ref.base.has_value() 
-                        and mem_ref.base->id == Register::Id::Rip) {
-                    Emit32(u32(mem_ref.disp.value_or(0)));
-                }
-                break;
-            }
-            case Mod_Rm_Builder::kMod_Mem_Disp8_Transfer: {
-                Emit8(static_cast<u8>(dst.As<Mem_Ref>().disp.value_or(0)));
-                break;
-            }
-            case Mod_Rm_Builder::kMod_Mem_Disp32_Transfer: {
-                Emit32(static_cast<u32>(dst.As<Mem_Ref>().disp.value_or(0)));
-                break;
-            }
-            case Mod_Rm_Builder::kMod_Reg_Transfer: {
-                // No displacement to emit.
-                break;
-            }
-            default:
-                dbg::Unreachable("Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
-                        u8(mod_rm_builder.mod_rm.mod));
-            } // switch
+            if (dst.IsMemRef()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, dst.As<Mem_Ref>()); }
         }
-        // MOV r, r/m
+
+        // Instructions encoded:
+        // MOV r8, r/m8
+        // MOV r16, r/m16
+        // MOV r32, r/m32
+        // MOV r64, r/m64
         else if (dst.IsRegister() and src.IsRegisterOrMemRef()) {
             u8 op_code = 0x8b - (dst.As<Register>().size == Bit_Width::B8);
 
@@ -446,39 +462,18 @@ struct Assembler {
             Emit8(mod_rm_builder.AsU8());
             if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
 
-            switch (u8(mod_rm_builder.mod_rm.mod)) {
-            case Mod_Rm_Builder::kMod_Mem_Transfer: {
-                const Mem_Ref& mem_ref = src.As<Mem_Ref>();
-
-                // If Rip is the base of a memory reference then it is required to have
-                // a 32-bit displacement following the Mod_Rm and Sib byte.
-                if (mem_ref.base.has_value() 
-                        and mem_ref.base->id == Register::Id::Rip) {
-                    Emit32(u32(mem_ref.disp.value_or(0)));
-                }
-                break;
-            }
-            case Mod_Rm_Builder::kMod_Mem_Disp8_Transfer: {
-                Emit8(static_cast<u8>(src.As<Mem_Ref>().disp.value_or(0)));
-                break;
-            }
-            case Mod_Rm_Builder::kMod_Mem_Disp32_Transfer: {
-                Emit32(static_cast<u32>(src.As<Mem_Ref>().disp.value_or(0)));
-                break;
-            }
-            case Mod_Rm_Builder::kMod_Reg_Transfer: {
-                // No displacement to emit.
-                break;
-            }
-            default:
-                dbg::Unreachable("Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
-                        u8(mod_rm_builder.mod_rm.mod));
-            } // switch
-
+            if (src.IsMemRef()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, src.As<Mem_Ref>()); }
         }
 
-        // MOV rax, moffs
-        // MOV moffs, rax
+        // Instructions encoded:
+        // MOV r8, moffs8
+        // MOV r16, moffs16
+        // MOV r32, moffs32
+        // MOV r64, moffs64
+        // MOV moffs8, r8
+        // MOV moffs16, r16
+        // MOV moffs32, r32
+        // MOV moffs64, r64
         else if ((dst.IsRegister() and src.IsMoffs()) or (dst.IsMoffs() and src.IsRegister())) {
             const Register& reg = src.IsRegister() ? src.As<Register>() : dst.As<Register>();
             const M_Offs& moffs = src.IsMoffs() ? src.As<M_Offs>() : dst.As<M_Offs>();
@@ -502,7 +497,11 @@ struct Assembler {
             Emit64(u64(moffs.ToI64()));
         }
 
-        // MOV r, imm
+        // Instructions encoded:
+        // MOV r8, Imm8
+        // MOV r16, Imm16
+        // MOV r32, Imm32
+        // MOV r64, Imm64
         else if (dst.IsRegister() and src.IsImm()) {
             u8 op_code = dst.As<Register>().size == Bit_Width::B8 ? 0xb0 : 0xb8;
 
@@ -521,7 +520,11 @@ struct Assembler {
             EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Register>().size);
         }
 
-        // MOV r/m, imm
+        // Instructions encoded:
+        // MOV r/m8, Imm8
+        // MOV r/m16, Imm16
+        // MOV r/m32, Imm32
+        // MOV r/m64, Imm64
         else if (dst.IsMemRef() and src.IsImm()) {
             u8 op_code = 0xc7 - (dst.As<Mem_Ref>().size == Bit_Width::B8);
 
