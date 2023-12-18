@@ -30,6 +30,30 @@ auto dbg::PrintStackTrace() -> void {
     free(strings);
 }
 
+auto dbg::AssertionHelper(std::string err_msg, std::source_location loc) -> void {
+    std::string out;
+
+    out += "\n=============================================\n";
+    out += fmt::format("{}: {}\n",
+            fmt::styled("Assertion Failed", fmt::emphasis::bold | fg(fmt::color::red)),
+            err_msg);
+
+    out += fmt::format("{} @ {}\n",
+        fmt::format(fmt::emphasis::bold | fg(fmt::color::cyan)| fmt::emphasis::underline,
+                "-->{}:{}:{}", loc.file_name(), loc.line(), loc.column()),
+        loc.function_name());
+    
+    fmt::print("{}\n", out);
+
+    // Print the backtrace
+    out += fmt::format(fmt::emphasis::bold | fg(fmt::color::cyan) | fmt::emphasis::underline,
+            "Backtrace:\n");
+
+    PrintStackTrace();
+
+    std::exit(1);
+}
+
 auto utils::FitsInU8(i64 num) -> bool {
     return num >= -128 and num <= 127;
 }

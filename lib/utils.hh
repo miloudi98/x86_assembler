@@ -42,19 +42,27 @@ namespace dbg {
 
 auto PrintStackTrace() -> void;
 
-// FIXME: Replace the Assertion machinery with a macro. It's cleaner
-// that way.
+[[noreturn]] auto AssertionHelper(
+        std::string err_msg,
+        std::source_location loc) -> void;
+
+
 // Assertion helpers
 template <typename... Args>
 struct Assert {
-    explicit Assert(std::source_location loc,
-            bool assertion,
-            fmt::format_string<Args...> fmt,
-            Args&&... args)
+    explicit Assert(bool assertion,
+            std::source_location loc = std::source_location::current())
     {
-        // TODO: think about this overload to implement something like
-        // dbg::Unreachable();
+        Assert(false, "", loc);
     }
+
+    // Having an explicit multi-argument constructor disallows 
+    // copy-initialization using an initializer list.
+    //
+    // Assert<Args...> assert = { ... } // won't compile.
+    //
+    // This will probably never happen in practice because that's not how 
+    // this type is intended to be used, but we'll keep the explicit for now.
     explicit Assert(bool assertion,
             fmt::format_string<Args...> fmt,
             Args&&... args,
@@ -62,29 +70,24 @@ struct Assert {
     {
         // Assertion holds. Do nothing.
         if (assertion) return;
+        AssertionHelper(fmt::format(fmt, std::forward<Args>(args)...), loc);
+    }
+};
 
-        std::string out;
-        std::string err_msg = fmt::format(fmt, std::forward<Args>(args)...);
+template <typename... Args>
+struct Unreachable {
+    [[noreturn]] explicit Unreachable(
+            std::source_location loc = std::source_location::current())
+    {
+        Unreachable("Encountered an unreachable state!", loc);
+    }
 
-        out += "\n=============================================\n";
-        out += fmt::format("{}: {}\n",
-                fmt::styled("Assertion Failed", fmt::emphasis::bold | fg(fmt::color::red)),
-                err_msg);
-
-        out += fmt::format("{} @ {}\n",
-            fmt::format(fmt::emphasis::bold | fg(fmt::color::cyan)| fmt::emphasis::underline,
-                    "-->{}:{}:{}", loc.file_name(), loc.line(), loc.column()),
-            loc.function_name());
-        
-        fmt::print("{}\n", out);
-
-        // Print the backtrace
-        out += fmt::format(fmt::emphasis::bold | fg(fmt::color::cyan) | fmt::emphasis::underline,
-                "Backtrace:\n");
-
-        PrintStackTrace();
-
-        std::exit(1);
+    [[noreturn]] explicit Unreachable(
+            fmt::format_string<Args...> fmt,
+            Args&&... args,
+            std::source_location loc = std::source_location::current())
+    {
+        AssertionHelper(fmt::format(fmt, std::forward<Args>(args)...), loc);
     }
 };
 
@@ -92,6 +95,9 @@ struct Assert {
 // TODO(miloudi): Explain why we need this deduction guide.
 template <typename... Args>
 Assert(bool assertion, fmt::format_string<Args...> fmt, Args&&... args) -> Assert<Args...>;
+
+template <typename... Args>
+Unreachable(fmt::format_string<Args...> fmt, Args&&... args) -> Unreachable<Args...>;
 
 }  // namespace dbg
 
