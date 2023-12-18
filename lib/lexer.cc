@@ -190,20 +190,8 @@ auto Lexer::NextTok() -> Tok {
 
     tok.loc.len = u32(foffset - tok.loc.offset - 1);
     tok.loc.fid = fid;
-    tok.str = Spelling(foffset, tok.loc.len);
+    tok.str = SpellingView(foffset, tok.loc.len);
     return tok;
-}
-
-auto Lexer::Spelling(u64 offset, u32 len) -> std::string {
-    dbg::Assert(offset < chars.size() and offset + len <= chars.size(),
-            "Attempting to get the spelling of a token using "
-            "an out of bounds range!");
-
-    // FIXME: We probably don't need to copy the string here. 
-    // The lexer and the file it lexes both have the same lifetime.
-    // We can get away with returning a view of the spelling instead.
-    // Or maybe I'm wrong, we'll see.
-    return std::string(chars.substr(offset, len));
 }
 
 auto Lexer::SpellingView(u64 offset, u32 len) -> std::string_view {

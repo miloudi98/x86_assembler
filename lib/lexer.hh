@@ -77,7 +77,6 @@ struct Lexer {
     Lexer(fsm::File& file)
         : chars(file.Content()), fid(file.fid) {}
 
-    auto Spelling(u64 offset, u32 len) -> std::string;
     auto SpellingView(u64 offset, u32 len) -> std::string_view;
     auto NextChar(bool ignore_whitespace = false) -> Opt<char>;
     auto NextCharRaw() -> Opt<char> { 
