@@ -192,17 +192,15 @@ struct Mod_Rm_Builder {
                 }
                 return ModBasedOnDisp(mem_ref.disp.value());
             }
-            case Mem_Ref::Kind::Disp_Only:
+            case Mem_Ref::Kind::Disp_Only: 
             case Mem_Ref::Kind::Index_Maybe_Disp: {
                 return kMod_Mem_Transfer; 
             }
             case Mem_Ref::Kind::Invalid: {
-                dbg::Assert(false, "Unreachable!");
+                dbg::Unreachable();
             }
             } // switch
-
-            // should never be reached.
-            std::terminate();
+            dbg::Unreachable();
         }();
         return *this;
     }
@@ -248,11 +246,10 @@ struct Mod_Rm_Builder {
                 return kSib_Byte_Following;
             
             case Mem_Ref::Kind::Invalid:
-                dbg::Assert(false, "Unreachable!");
+                dbg::Unreachable();
             } // switch
 
-            // should never be reached.
-            std::terminate();
+            dbg::Unreachable();
         }();
 
         // The trailing return type helps the compiler implicitely cast the
@@ -283,11 +280,10 @@ struct Mod_Rm_Builder {
             }
 
             case Mem_Ref::Kind::Invalid:
-                dbg::Assert(false, "Unreachable!");
+                dbg::Unreachable();
             } // switch
 
-            // should never be reached.
-            std::terminate();
+            dbg::Unreachable();
         }();
 
         return *this;
@@ -367,7 +363,7 @@ struct Assembler {
             break;
 
         case Bit_Width::Invalid:
-            dbg::Assert(false, "Unreachable!");
+            dbg::Unreachable();
         } // switch
     }
     GCC_DIAG_IGNORE_POP();
@@ -423,7 +419,7 @@ struct Assembler {
                 break;
             }
             default:
-                dbg::Assert(false, "Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
+                dbg::Unreachable("Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
                         u8(mod_rm_builder.mod_rm.mod));
             } // switch
         }
@@ -475,7 +471,7 @@ struct Assembler {
                 break;
             }
             default:
-                dbg::Assert(false, "Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
+                dbg::Unreachable("Encountered an unknown mod in the Mod_Rm byte: '{}'.", 
                         u8(mod_rm_builder.mod_rm.mod));
             } // switch
 
