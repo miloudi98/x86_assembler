@@ -6,7 +6,12 @@
 #include <string>
 #include <utility>
 #include <optional>
+#include <span>
 #include <source_location>
+#include <string_view>
+#include <concepts>
+#include <filesystem>
+#include <unordered_map>
 #include <fmt/format.h>
 #include <fmt/color.h>
 
@@ -37,6 +42,8 @@ using Vec = std::vector<T>;
 
 template <typename T>
 using Opt = std::optional<T>;
+
+namespace fs = std::filesystem;
 
 namespace dbg {
 
@@ -109,7 +116,39 @@ constexpr auto operator+(E e) -> std::underlying_type_t<E> {
 
 namespace utils {
 
+// ============================================================================
+// StringMap utility type.
+//
+// This is basically an std::unordered_map<std::string, T> but with the 
+// additional property of heterogeneous lookups. Lookups can be made using
+// any type that is convertible to a string_view. One important thing to note
+// here is that the type with which the lookup is made must be comparable to 
+// a string. Something like std::span<const char> will not work!
+// A vanilla std::unordered_map doesn't allow this kind of behaviour by default.
+// ============================================================================
+struct StringHash {
+    using is_transparent = void;
+
+    [[nodiscard]] auto operator()(std::string_view data) const { return std::hash<std::string_view>{}(data); }
+
+    [[nodiscard]] auto operator()(const std::string& data) const { return std::hash<std::string>{}(data); }
+
+    template <typename Ty>
+    requires requires(const Ty& ty) {
+        { ty.size() } -> std::convertible_to<usz>;
+        { ty.data() } -> std::convertible_to<const char*>;
+    }
+    [[nodiscard]] auto operator()(const Ty& ty) const { 
+        return std::hash<std::string_view>{}(std::string_view{ty.data(), ty.size()});
+    }
+};
+
+template <typename T>
+using StringMap = std::unordered_map<std::string, T, StringHash, std::equal_to<>>;
+
 auto FitsInU8(i64 num) -> bool;
+
+auto LoadFile(const fs::path& path) -> Vec<char>;
 
 }  // namespace utils
 

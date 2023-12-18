@@ -17,11 +17,6 @@ enum struct Bit_Width : i32 {
     B64 = 64
 };
 
-enum struct Patch_Opcode : bool {
-    No = 0,
-    Yes = 1,
-};
-
 union Rex {
     struct {
         // Mod_Rm::r/m or Sib::Base extension.
@@ -203,6 +198,7 @@ struct Mod_Rm_Builder {
                 dbg::Unreachable();
             }
             } // switch
+
             dbg::Unreachable();
         }();
         return *this;

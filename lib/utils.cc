@@ -1,6 +1,10 @@
 #include <string>
 #include <execinfo.h>
 #include <limits>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "lib/utils.hh"
 
@@ -56,4 +60,31 @@ auto dbg::AssertionHelper(std::string err_msg, std::source_location loc) -> void
 
 auto utils::FitsInU8(i64 num) -> bool {
     return num >= -128 and num <= 127;
+}
+
+auto utils::LoadFile(const fs::path& path) -> Vec<char> {
+    i32 fd = open(path.c_str(), O_RDONLY);
+    dbg::Assert(fd >= 0,
+            "Failed to open file '{}'", path.string());
+
+    struct stat file_st{};
+
+    dbg::Assert(fstat(fd, &file_st) >= 0,
+            "Failed to query stats of file: '{}'", path.string());
+
+    void* ptr = mmap(nullptr, usz(file_st.st_size), PROT_READ, MAP_PRIVATE, fd, 0);
+    dbg::Assert(ptr != MAP_FAILED, "Failed to mmap file: '{}'", path.string());
+
+    // QUESTION: do we really need to copy the contents of the map to a vector?
+    // Can't we reuse the same memory? 
+    // IOW, return a std::vector<char> {.data = ptr, .size = file_st.st_size }
+    // instead of copying the entire mapped memory chunk.
+    Vec<char> content(usz(file_st.st_size));
+    memcpy(content.data(), ptr, usz(file_st.st_size));
+
+    // TODO: Implement defer macro.
+    close(fd);
+    munmap(ptr, static_cast<usz>(file_st.st_size));
+
+    return content;
 }

@@ -1,0 +1,10 @@
+// One line comment that should be ignored.
+
+fn custom_function {
+    mov(b64 rax, b64 rbx);
+    mov(b64 rcx, @b64 [rax][2][rbx] + 0x11223344);
+    mov(b64 rdx, @b64 [rax] + 0x11223344);
+    mov(b64 r8, @b64 [][2][rbx] + 0x11223344);
+    mov(b64 r9, @b64 0x11223344);
+    mov(b32 eax, @b32 0x11223344);
+}
