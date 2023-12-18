@@ -68,22 +68,22 @@ const ::utils::StringMap<Tok::Ty> keywords = {
 
 }  // namespace
 
-auto Lexer::NextChar() -> Opt<char> {
+auto Lexer::NextChar(bool ignore_whitespace) -> Opt<char> {
     if (IsEof()) { return std::nullopt; }
 
-    while (not IsEof() and IsWhiteSpace(chars[foffset++])) {}
+    while (not ignore_whitespace and not IsEof() and IsWhiteSpace(chars[foffset++])) {}
 
     return NextChar();
 }
 
-auto Lexer::PeekChar(u32 n) -> Opt<char> {
+auto Lexer::PeekChar(u32 n, bool ignore_whitespace) -> Opt<char> {
     if (IsEof()) { return std::nullopt; }
 
     // Store the current offset.
     u64 old_offset = foffset;
 
     Opt<char> c = std::nullopt;
-    while (n--) { c = NextChar(); }
+    while (n--) { c = NextChar(ignore_whitespace); }
 
     // Restore the foffset altered by the consecutive 
     // calls to |NextChar|.
@@ -107,6 +107,10 @@ auto Lexer::NextTok() -> Tok {
     }
     case ',': {
         tok.ty = Tok::Ty::Comma;
+        break;
+    }
+    case ':': {
+        tok.ty = Tok::Ty::Colon;
         break;
     }
     case '(': {
@@ -136,6 +140,20 @@ auto Lexer::NextTok() -> Tok {
     case '@': {
         tok.ty = Tok::Ty::At;
         break;
+    }
+    case '+': {
+        tok.ty = Tok::Ty::Plus;
+        break;
+    }
+    case '-': {
+        tok.ty = Tok::Ty::Minus;
+        break;
+    }
+    case '/': {
+        dbg::Assert(PeekChar().value() == '/',
+                "Foud character '/' that does not start a line comment!");
+        LexComment();
+        return NextTok();
     }
     case '0': {
         Opt<char> cc = PeekChar();
@@ -193,8 +211,13 @@ auto Lexer::SpellingView(u64 offset, u32 len) -> std::string_view {
             "Attempting to get the spelling of a token using "
             "an out of bounds range!");
 
-
     return chars.substr(offset, len);
+}
+
+auto Lexer::LexComment() -> void {
+    while (PeekCharRaw().has_value() and *PeekCharRaw() != '\n') {
+        NextCharRaw();
+    }
 }
 
 auto Lexer::LexHexDigit(Tok& tok) -> void {

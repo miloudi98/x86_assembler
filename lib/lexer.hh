@@ -30,8 +30,14 @@ struct Tok {
         At,
         // ';'
         SemiColon,
+        // ':'
+        Colon,
         // ','
         Comma,
+        // '+'
+        Plus,
+        // '-'
+        Minus,
 
         // Multi-character tokens.
         // Identifier
@@ -73,10 +79,19 @@ struct Lexer {
 
     auto Spelling(u64 offset, u32 len) -> std::string;
     auto SpellingView(u64 offset, u32 len) -> std::string_view;
-    auto NextChar() -> Opt<char>;
-    auto PeekChar(u32 n = 0) -> Opt<char>;
+    auto NextChar(bool ignore_whitespace = false) -> Opt<char>;
+    auto NextCharRaw() -> Opt<char> { 
+        return NextChar(/*ignore_whitespace=*/false);
+    }
+
+    auto PeekChar(u32 n = 0, bool ignore_whitespace = false) -> Opt<char>;
+    auto PeekCharRaw(u32 n = 0, bool ignore_whitespace = false) -> Opt<char> {
+        return PeekChar(n, /*ignore_whitespace=*/false);
+    }
+
     auto IsEof() const -> bool { return foffset >= chars.size(); }
     auto NextTok() -> Tok;
+    auto LexComment() -> void;
     auto LexHexDigit(Tok& tok) -> void;
     auto LexDigit(Tok& tok) -> void;
     auto LexIdent(Tok& tok) -> void;

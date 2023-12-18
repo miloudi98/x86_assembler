@@ -545,7 +545,7 @@ struct Assembler {
             EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Mem_Ref>().size);
         }
         else {
-            dbg::Assert(false, "Unreachable!");
+            dbg::Unreachable();
         }
     }
 };
