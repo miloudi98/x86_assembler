@@ -174,7 +174,7 @@ auto Lexer::NextTok() -> Tok {
     tok.loc.len = u32(foffset - tok.loc.offset - 1);
     tok.loc.fid = fid;
     tok.str = Spelling(foffset, tok.loc.len);
-    dbg::Unreachable();
+    return tok;
 }
 
 auto Lexer::Spelling(u64 offset, u32 len) -> std::string {
