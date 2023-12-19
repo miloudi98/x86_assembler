@@ -8,6 +8,7 @@
 
 namespace fiska::core {
 
+// FIXME: Change the name to `Operand_Size`.
 enum struct Bit_Width : i32 {
     Invalid = -1,
 
@@ -55,8 +56,9 @@ struct Register {
     Id id = Id::Invalid;
     Bit_Width size = Bit_Width::Invalid;
 
+    Register() {}
+    Register(Id id, Bit_Width size) : id(id), size(size) {}
     auto Index() const -> u8 { return +id & 0x7; }
-
     auto RequiresExtension() const -> bool { return +id >= +Id::R8 and +id <= +Id::R15; }
 };
 
@@ -78,11 +80,22 @@ struct Mem_Ref {
     };
 
     Kind kind = Kind::Invalid;
-    Opt<Scale> scale = std::nullopt;
     Opt<Register> base = std::nullopt;
+    Opt<Scale> scale = std::nullopt;
     Opt<Register> index = std::nullopt;
     Opt<i64> disp = std::nullopt;
     Bit_Width size = Bit_Width::Invalid;
+
+    Mem_Ref() {}
+    Mem_Ref(
+        Kind kind,
+        Opt<Register> base,
+        Opt<Scale> scale,
+        Opt<Register> index,
+        Opt<i64> disp,
+        Bit_Width size 
+    ) : kind(kind), base(base), scale(scale),
+    index(index), disp(disp), size(size) {}
 };
 
 struct M_Offs {

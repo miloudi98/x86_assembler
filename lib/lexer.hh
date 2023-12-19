@@ -74,9 +74,9 @@ struct Lexer {
     // Offset into the file we are lexing.
     u64 foffset{};
     u16 fid{};
+    Tok tok{};
 
-    Lexer(fsm::File& file)
-        : chars(file.Content()), fid(file.fid) {}
+    Lexer(fsm::File& file);
 
     auto SpellingView(u64 offset, u32 len) -> std::string_view;
     auto NextChar(bool ignore_whitespace = false) -> Opt<char>;
@@ -90,11 +90,11 @@ struct Lexer {
     }
 
     auto IsEof() const -> bool { return foffset >= chars.size(); }
-    auto NextTok() -> Tok;
+    auto NextTok() -> void;
     auto LexComment() -> void;
-    auto LexHexDigit(Tok& tok) -> void;
-    auto LexDigit(Tok& tok) -> void;
-    auto LexIdent(Tok& tok) -> void;
+    auto LexHexDigit() -> void;
+    auto LexDigit() -> void;
+    auto LexIdent() -> void;
 };
 
 

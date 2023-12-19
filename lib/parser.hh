@@ -9,15 +9,19 @@
 
 namespace fiska::syntax {
 
-using core::Operand;
-using fsm::SourceLoc;
-
 struct Expr;
 struct ProcDecl;
+struct X86_Instruction;
 
 struct Module {
     // AST of this module.
     Vec<Expr*> exprs;
+    // FIXME: this belongs to the ProcDecl. A ProcDecl
+    // must own all x86_instructions that were defined 
+    // within it.
+    //
+    // All instructions within this module.
+    Vec<X86_Instruction*> x86_instrs;
     // Module name.
     std::string name;
 };
@@ -35,10 +39,10 @@ struct X86_Instruction {
 };
 
 struct Mov : public X86_Instruction {
-    Operand dst;
-    Operand src;
+    core::Operand dst;
+    core::Operand src;
 
-    Mov(Operand dst, Operand src) 
+    Mov(core::Operand dst, core::Operand src) 
         : X86_Instruction(X86_Instruction::Ty::Mov),
         dst(dst), src(src)
     {}
@@ -63,9 +67,9 @@ struct Expr {
 };
 
 struct BlockExpr : public Expr {
-    Vec<Expr*> exprs;
+    Vec<X86_Instruction*> exprs;
 
-    BlockExpr(Vec<Expr*> exprs) 
+    BlockExpr(Vec<X86_Instruction*> exprs) 
         : Expr(Expr::Ty::Block), exprs(std::move(exprs)) {}
 };
 
@@ -79,11 +83,27 @@ struct ProcDecl : public Expr {
 
 struct Parser {
     Lexer lxr;
+    Module* mod{};
 
     Parser(fsm::File& file) : lxr(Lexer(file)) {}
 
+    // Helper functions.
+    auto At(std::same_as<Tok::Ty> auto... tok_tys) -> bool {
+        return ((lxr.tok.ty == tok_tys) or ...);
+    }
+
+    auto Consume(std::same_as<Tok::Ty> auto... tok_tys) -> bool {
+        if (At(tok_tys...)) {
+            lxr.NextTok();
+            return true;
+        }
+        return false;
+    }
+
     auto ParseProcDecl() -> ProcDecl*;
     auto ParseBlockExpr() -> BlockExpr*;
+    auto ParseX86Instruction() -> X86_Instruction*;
+    auto ParseX86Operand() -> core::Operand;
     auto ParseFile() -> Module*;
 };
 

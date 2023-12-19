@@ -68,9 +68,18 @@ const ::utils::StringMap<Tok::Ty> keywords = {
 
 }  // namespace
 
+Lexer::Lexer(fsm::File& file) : chars(file.Content()), fid(file.fid) {
+    // Initialize member variable |tok|.
+    NextTok();
+}
+
 auto Lexer::NextChar(bool ignore_whitespace) -> Opt<char> {
     if (IsEof()) { return std::nullopt; }
 
+    // FIXME: Ignoring whitespace here is probably a mistake that can lead
+    // to some hard to find bugs. Have an explicit function that ignores
+    // whitespace instead. Once that's done, remove functions |NextCharRaw|
+    // and |PeekCharRaw| as they will become useless.
     while (not ignore_whitespace and not IsEof() and IsWhiteSpace(chars[foffset++])) {}
 
     return NextChar();
@@ -91,19 +100,22 @@ auto Lexer::PeekChar(u32 n, bool ignore_whitespace) -> Opt<char> {
     return c;
 }
 
-auto Lexer::NextTok() -> Tok {
-    Tok tok = Tok::Make(Tok::Ty::Invalid);
+auto Lexer::NextTok() -> void {
     tok.loc.offset = foffset;
 
     Opt<char> c = NextChar();
-    if (not c.has_value()) { return Tok::Make(Tok::Ty::Eof); }
+    if (not c.has_value()) {
+        tok.ty = Tok::Ty::Eof;
+        return;
+    }
 
 
     switch (*c) {
     case ' ': {
         // This is probably dangerous. A long sequence of whitespaces 
         // may overflow the stack! Maybe TCO will come to the rescue?
-        return NextTok();
+        NextTok();
+        break;
     }
     case ',': {
         tok.ty = Tok::Ty::Comma;
@@ -150,10 +162,11 @@ auto Lexer::NextTok() -> Tok {
         break;
     }
     case '/': {
-        dbg::Assert(PeekChar().value() == '/',
+        dbg::Assert(PeekCharRaw().value() == '/',
                 "Foud character '/' that does not start a line comment!");
         LexComment();
-        return NextTok();
+        NextTok();
+        break;
     }
     case '0': {
         Opt<char> cc = PeekChar();
@@ -161,7 +174,7 @@ auto Lexer::NextTok() -> Tok {
         if (cc.has_value() and *cc == 'x') {
             // Pop the 'x' from the '0x' prefix.
             NextChar();
-            LexHexDigit(tok);
+            LexHexDigit();
             break;
         }
         [[fallthrough]];
@@ -175,7 +188,7 @@ auto Lexer::NextTok() -> Tok {
     case '7':
     case '8':
     case '9': {
-        LexDigit(tok);
+        LexDigit();
         break;
     }
     default: {
@@ -183,7 +196,7 @@ auto Lexer::NextTok() -> Tok {
                 "Attempting to create a token from "
                 "an unknwon character: '{}'", *c);
 
-        LexIdent(tok);
+        LexIdent();
         break;
     }
     }  // switch
@@ -191,7 +204,6 @@ auto Lexer::NextTok() -> Tok {
     tok.loc.len = u32(foffset - tok.loc.offset - 1);
     tok.loc.fid = fid;
     tok.str = SpellingView(foffset, tok.loc.len);
-    return tok;
 }
 
 auto Lexer::SpellingView(u64 offset, u32 len) -> std::string_view {
@@ -208,21 +220,21 @@ auto Lexer::LexComment() -> void {
     }
 }
 
-auto Lexer::LexHexDigit(Tok& tok) -> void {
+auto Lexer::LexHexDigit() -> void {
     tok.ty = Tok::Ty::Num;
     while (PeekChar().has_value() and IsHexDigit(*PeekChar())) {
         NextChar();
     }
 }
 
-auto Lexer::LexDigit(Tok& tok) -> void {
+auto Lexer::LexDigit() -> void {
     tok.ty = Tok::Ty::Num;
     while (PeekChar().has_value() and IsDigit(*PeekChar())) {
         NextChar();
     }
 }
 
-auto Lexer::LexIdent(Tok& tok) -> void {
+auto Lexer::LexIdent() -> void {
     while (PeekChar().has_value() and IsIdentCont(*PeekChar())) {
         NextChar();
     }
