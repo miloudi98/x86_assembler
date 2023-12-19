@@ -8,6 +8,8 @@
 
 namespace fiska::syntax {
 
+using fsm::SourceLoc;
+
 struct Tok {
     enum struct Ty {
         Invalid,
@@ -57,7 +59,7 @@ struct Tok {
     // Token text.
     std::string str{};
     // Token location
-    fsm::SourceLoc loc{};
+    SourceLoc loc{};
 
 
     template <typename... args>
@@ -72,7 +74,6 @@ struct Lexer {
     // Offset into the file we are lexing.
     u64 foffset{};
     u16 fid{};
-    char lastc{'\0'};
 
     Lexer(fsm::File& file)
         : chars(file.Content()), fid(file.fid) {}
@@ -97,7 +98,7 @@ struct Lexer {
 };
 
 
-}  // namepsace syntax
+}  // namepsace fiska::syntax
 
 
 #endif  // __X86_ASSEMBLER_LIB_LEXER_HH__

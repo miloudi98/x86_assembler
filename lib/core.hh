@@ -162,13 +162,12 @@ struct Mod_Rm_Builder {
 
     GCC_DIAG_IGNORE_PUSH(-Wconversion)
     auto SetMod(const Mem_Ref& mem_ref) -> Mod_Rm_Builder& {
+        auto ModBasedOnDisp = [](i64 disp) {
+            return utils::FitsInU8(disp) 
+                ? kMod_Mem_Disp8_Transfer
+                : kMod_Mem_Disp32_Transfer;
+        };
         mod_rm.mod = [&] {
-            auto ModBasedOnDisp = [&](i64 disp) {
-                return utils::FitsInU8(disp) 
-                    ? kMod_Mem_Disp8_Transfer
-                    : kMod_Mem_Disp32_Transfer;
-            };
-
             switch (mem_ref.kind) {
             case Mem_Ref::Kind::Base_Maybe_Disp: {
                 if (mem_ref.base.value().id == Register::Id::Rbp
