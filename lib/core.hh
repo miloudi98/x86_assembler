@@ -133,8 +133,7 @@ struct Operand {
 
     Operand(Inner op) : inner(op) {}
 
-    template <typename... Ts>
-    requires (operand::IsInnerType<Ts> and ...)
+    template <operand::IsInnerType... Ts>
     constexpr bool Is() const { return (std::holds_alternative<Ts>(inner) or ...); }
 
     template <operand::IsInnerType T>
