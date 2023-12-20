@@ -38,8 +38,54 @@ const utils::StringMap<core::Register::Id> x86_registers = {
     {"r15", core::Register::Id::R15},
 };
 
+
+// Credit to llvm: https://llvm.org/doxygen/StringRef_8cpp_source.html
 auto StringToI64(std::string_view str) -> Opt<i64> {
-    dbg::Unreachable();
+    bool is_negative = str.starts_with('-');
+    str.remove_prefix(1);
+
+    u8 radix = str.starts_with("0x") ? 16 : 10;
+    if (radix == 16) { str.remove_prefix(2); }
+
+    auto curr_str = str;
+
+    u64 ret = 0;
+
+    while (not curr_str.empty()) {
+        u8 ord = 0;
+
+        if (curr_str[0] >= '0' and curr_str[0] <= '9') {
+            ord = u8(curr_str[0] - '0');
+        } else if (curr_str[0] >= 'a' and curr_str[0] <= 'z') {
+            ord = u8(curr_str[0] - 'a' + 10);
+        } else if (curr_str[0] >= 'A' and curr_str[0] <= 'Z') {
+            ord = u8(curr_str[0] - 'A' + 10);
+        } else {
+            return std::nullopt;
+        }
+
+        if (ord >= radix) {
+            return std::nullopt;
+        }
+
+        u64 old_ret = ret;
+        ret = ret * radix + ord;
+
+        // overflow detected.
+        if ((ret / radix) < old_ret) {
+            return std::nullopt;
+        }
+
+        curr_str.remove_prefix(1);
+    }
+
+    // check if negative number is not too large to 
+    // fit in an i64.
+    if (is_negative and static_cast<i64>(-ret) > 0) {
+        return std::nullopt;
+    }
+
+    return static_cast<i64>(ret);
 }
 
 }  // namespace
@@ -47,6 +93,12 @@ auto StringToI64(std::string_view str) -> Opt<i64> {
 void* Expr::operator new(usz sz, Module* mod) {
     auto ptr = static_cast<Expr*>(::operator new(sz));
     mod->exprs.push_back(ptr);
+    return ptr;
+}
+
+void* X86_Instruction::operator new(usz sz, Module* mod) {
+    auto ptr = static_cast<X86_Instruction*>(::operator new(sz));
+    mod->x86_instrs.push_back(ptr);
     return ptr;
 }
 
@@ -130,30 +182,22 @@ auto Parser::ParseX86Operand() -> core::Operand {
         Consume(Tok::Ty::Bsize);
         return bit_width;
     };
-    // Register:
-    // -> b[x] rax
-    // 
-    // Mem_Ref: 
-    // ->Kind::Base_Index_Maybe_Disp: @b[x] [rax][2][rbx] + 0x11223344
-    // ->Kind::Base_Maybe_Disp: @b[x] [rax] + 0x11223344
-    // ->Kind::Index_Maybe_Disp: @b[x] [][2][rbx] + 0x11223344
-    // ->Kind::Disp_Only: @b[x] 0x11223344
-    //
-    // Imm:
-    // -> 0x11223344
+
     switch (lxr.tok.ty) {
     // Register:
     // -> b[x] rax
+    // x here represents the operand size.
     case Tok::Ty::Bsize: {
         auto bit_width = ParseBitWidth();
         auto reg_id = ParseX86Register();
         return core::Operand(core::Register(reg_id, bit_width));
     }
+
     // Mem_Ref: 
-    // ->Kind::Base_Index_Maybe_Disp: @b[x] [rax][2][rbx] + 0x11223344
-    // ->Kind::Base_Maybe_Disp: @b[x] [rax] + 0x11223344
-    // ->Kind::Index_Maybe_Disp: @b[x] [][2][rbx] + 0x11223344
-    // ->Kind::Disp_Only: @b[x] 0x11223344
+    // ->Kind::Base_Index_Maybe_Disp    @b[x] [rax][2][rbx] + 0x11223344
+    // ->Kind::Base_Maybe_Disp          @b[x] [rax] + 0x11223344
+    // ->Kind::Index_Maybe_Disp         @b[x] [][2][rbx] + 0x11223344
+    // ->Kind::Disp_Only                @b[x] 0x11223344
     case Tok::Ty::At: {
         Consume(Tok::Ty::At);
         auto operand_size = ParseBitWidth();
@@ -219,8 +263,7 @@ auto Parser::ParseX86Operand() -> core::Operand {
                 dbg::Assert(disp.has_value(), "Invalid number used a displacement");
                 mem_ref_disp.emplace(disp.value());
             }
-
-        // ->Kind::Disp_Only: @b[x] 0x11223344
+        // Displacement only
         } else {
             dbg::Assert(At(Tok::Ty::Num), "Expected a displacement after the operand size.");
 
@@ -233,17 +276,18 @@ auto Parser::ParseX86Operand() -> core::Operand {
         core::Mem_Ref::Kind mem_ref_kind = [&] {
             using Kind = core::Mem_Ref::Kind;
 
-            if (base_reg.has_value() and index_reg.has_value()) {
+            if (base_reg and index_reg) {
                 return Kind::Base_Index_Maybe_Disp;
             }
 
-            if (not base_reg.has_value() and index_reg.has_value()) {
+            if (not base_reg and index_reg) {
                 return Kind::Index_Maybe_Disp;
             }
 
-            if (base_reg.has_value() and not index_reg.has_value()) {
+            if (base_reg and not index_reg) {
                 return Kind::Base_Maybe_Disp;
             }
+
             return Kind::Disp_Only;
         }();
 
@@ -260,11 +304,20 @@ auto Parser::ParseX86Operand() -> core::Operand {
     }
     // Imm:
     // -> 0x11223344
+    case Tok::Ty::Plus:
+    case Tok::Ty::Minus:
     case Tok::Ty::Num: {
-        Opt<i64> imm = StringToI64(lxr.tok.str);
+        std::string buf;
+        if (At(Tok::Ty::Plus, Tok::Ty::Minus)) {
+            buf += lxr.tok.str;
+            Consume(Tok::Ty::Plus, Tok::Ty::Minus);
+        }
+        dbg::Assert(At(Tok::Ty::Num), "Expected a number after a '+' or a '-'");
+        buf += lxr.tok.str;
         Consume(Tok::Ty::Num);
-        dbg::Assert(imm.has_value(), "Invalid number used as an immediate");
 
+        Opt<i64> imm = StringToI64(buf);
+        dbg::Assert(imm.has_value(), "Invalid number provided as an Imm");
         return core::Operand(core::Imm(imm.value()));
     }
 

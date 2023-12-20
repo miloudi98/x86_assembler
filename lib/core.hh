@@ -189,7 +189,7 @@ struct Mod_Rm_Builder {
                     return ModBasedOnDisp(mem_ref.disp.value_or(0));
                 }
 
-                if (not mem_ref.disp.has_value()
+                if (not mem_ref.disp 
                         or mem_ref.base.value().id == Register::Id::Rip)
                 {
                     return kMod_Mem_Transfer;
@@ -197,7 +197,7 @@ struct Mod_Rm_Builder {
                 return ModBasedOnDisp(mem_ref.disp.value());
             }
             case Mem_Ref::Kind::Base_Index_Maybe_Disp: {
-                if (not mem_ref.disp.has_value()) {
+                if (not mem_ref.disp) {
                     return kMod_Mem_Transfer;
                 }
                 return ModBasedOnDisp(mem_ref.disp.value());
@@ -284,9 +284,9 @@ struct Mod_Rm_Builder {
             case Mem_Ref::Kind::Index_Maybe_Disp:
             case Mem_Ref::Kind::Disp_Only: {
                 return Sib {
-                    .base = mem_ref.base.has_value() ? mem_ref.base->Index() : kNo_Base_Reg,
-                    .index = mem_ref.index.has_value() ? mem_ref.index->Index() : kNo_Scaled_Index,
-                    .scale = mem_ref.scale.has_value() ? +mem_ref.scale.value() : +Mem_Ref::Scale::Zero
+                    .base = mem_ref.base ? mem_ref.base->Index() : kNo_Base_Reg,
+                    .index = mem_ref.index ? mem_ref.index->Index() : kNo_Scaled_Index,
+                    .scale = mem_ref.scale ? +mem_ref.scale.value() : +Mem_Ref::Scale::Zero
                 };
             }
 
@@ -388,7 +388,7 @@ struct Assembler {
             case Mod_Rm_Builder::kMod_Mem_Transfer: {
                 // If Rip is the base of a memory reference then it is required to have
                 // a 32-bit displacement following the Mod_Rm and Sib byte.
-                if (mem_ref.base.has_value() 
+                if (mem_ref.base 
                         and mem_ref.base->id == Register::Id::Rip) {
                     Emit32(u32(mem_ref.disp.value_or(0)));
                 }
@@ -423,9 +423,9 @@ struct Assembler {
 
             Rex rex {
                 .b = dst.IsMemRef() 
-                    ? dst.As<Mem_Ref>().base.has_value() and dst.As<Mem_Ref>().base->RequiresExtension()
+                    ? dst.As<Mem_Ref>().base and dst.As<Mem_Ref>().base->RequiresExtension()
                     : dst.As<Register>().RequiresExtension(),
-                .x = dst.IsMemRef() and dst.As<Mem_Ref>().index.has_value() and dst.As<Mem_Ref>().index->RequiresExtension(),
+                .x = dst.IsMemRef() and dst.As<Mem_Ref>().index and dst.As<Mem_Ref>().index->RequiresExtension(),
                 .r = src.As<Register>().RequiresExtension(),
                 .w = src.As<Register>().size == Bit_Width::B64
             };
@@ -438,7 +438,7 @@ struct Assembler {
             if (rex.IsRequired()) { Emit8(rex.raw); }
             Emit8(op_code);
             Emit8(mod_rm_builder.AsU8());
-            if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
+            if (mod_rm_builder.sib) { Emit8(mod_rm_builder.sib.value().raw); }
 
             if (dst.IsMemRef()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, dst.As<Mem_Ref>()); }
         }
@@ -453,9 +453,9 @@ struct Assembler {
 
             Rex rex {
                 .b = src.IsMemRef() 
-                    ? src.As<Mem_Ref>().base.has_value() and src.As<Mem_Ref>().base->RequiresExtension()
+                    ? src.As<Mem_Ref>().base and src.As<Mem_Ref>().base->RequiresExtension()
                     : src.As<Register>().RequiresExtension(),
-                .x = src.IsMemRef() and src.As<Mem_Ref>().index.has_value() and src.As<Mem_Ref>().index->RequiresExtension(),
+                .x = src.IsMemRef() and src.As<Mem_Ref>().index and src.As<Mem_Ref>().index->RequiresExtension(),
                 .r = dst.As<Register>().RequiresExtension(),
                 .w = dst.As<Register>().size == Bit_Width::B64
             };
@@ -468,7 +468,7 @@ struct Assembler {
             if (rex.IsRequired()) { Emit8(rex.raw); }
             Emit8(op_code);
             Emit8(mod_rm_builder.AsU8());
-            if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
+            if (mod_rm_builder.sib) { Emit8(mod_rm_builder.sib.value().raw); }
 
             if (src.IsMemRef()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, src.As<Mem_Ref>()); }
         }
@@ -539,8 +539,8 @@ struct Assembler {
             const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
 
             Rex rex {
-                .b = mem_ref.base.has_value() and mem_ref.base->RequiresExtension(),
-                .x = mem_ref.index.has_value() and mem_ref.index->RequiresExtension(),
+                .b = mem_ref.base and mem_ref.base->RequiresExtension(),
+                .x = mem_ref.index and mem_ref.index->RequiresExtension(),
                 .r = 0,
                 .w = mem_ref.size == Bit_Width::B64
             };
@@ -553,7 +553,7 @@ struct Assembler {
             if (rex.IsRequired()) { Emit8(rex.raw); }
             Emit8(op_code);
             Emit8(mod_rm_builder.AsU8());
-            if (mod_rm_builder.sib.has_value()) { Emit8(mod_rm_builder.sib.value().raw); }
+            if (mod_rm_builder.sib) { Emit8(mod_rm_builder.sib.value().raw); }
             EmitSized(u64(src.As<Imm>().ToI64()), dst.As<Mem_Ref>().size);
         }
         else {

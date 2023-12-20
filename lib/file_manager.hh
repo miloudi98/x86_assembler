@@ -34,6 +34,7 @@ private:
 struct File_Manager {
     Vec<Box<File>> active_files;
 
+    File_Manager() {}
     // Keep one instance of the File_Manager in use.
     // The File_Manager can't be moved as well.
     File_Manager(const File_Manager&) = delete;
@@ -44,7 +45,9 @@ struct File_Manager {
     // Loads a file from disk and return its fid.
     [[nodiscard]] auto LoadFile(const fs::path& path) -> u16;
     // Returns a view of the contents of a file.
-    [[nodiscard]] auto ViewFileContent(u16 fid) -> std::span<const char>;
+    [[nodiscard]] auto ViewFileContent(u16 fid) -> std::string_view;
+    // Returns a reference to a file.
+    [[nodiscard]] auto GetFile(u16 fid) -> File&;
 };
 
 struct SourceLoc {

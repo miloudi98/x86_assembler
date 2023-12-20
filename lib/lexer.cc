@@ -104,11 +104,10 @@ auto Lexer::NextTok() -> void {
     tok.loc.offset = foffset;
 
     Opt<char> c = NextChar();
-    if (not c.has_value()) {
+    if (not c) {
         tok.ty = Tok::Ty::Eof;
         return;
     }
-
 
     switch (*c) {
     case ' ': {
@@ -170,12 +169,16 @@ auto Lexer::NextTok() -> void {
     }
     case '0': {
         Opt<char> cc = PeekChar();
+        dbg::Assert(cc and not IsDigit(*cc),
+                "Leading zeros are not allowed in decimal numbers");
+
         // Remove the '0x' prefix before lexing the hex digit.
-        if (cc.has_value() and *cc == 'x') {
+        if (cc and *cc == 'x') {
             // Pop the 'x' from the '0x' prefix.
             NextChar();
             LexHexDigit();
             break;
+
         }
         [[fallthrough]];
     }
@@ -201,7 +204,7 @@ auto Lexer::NextTok() -> void {
     }
     }  // switch
 
-    tok.loc.len = u32(foffset - tok.loc.offset - 1);
+    tok.loc.len = u32(foffset - tok.loc.offset);
     tok.loc.fid = fid;
     tok.str = SpellingView(foffset, tok.loc.len);
 }

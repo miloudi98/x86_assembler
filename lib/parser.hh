@@ -16,10 +16,6 @@ struct X86_Instruction;
 struct Module {
     // AST of this module.
     Vec<Expr*> exprs;
-    // FIXME: this belongs to the ProcDecl. A ProcDecl
-    // must own all x86_instructions that were defined 
-    // within it.
-    //
     // All instructions within this module.
     Vec<X86_Instruction*> x86_instrs;
     // Module name.
@@ -36,6 +32,11 @@ struct X86_Instruction {
 
     X86_Instruction(Ty ty) : ty(ty) {}
     virtual ~X86_Instruction() = default;
+
+    // Create an expression and bind it to its parent module.
+    void* operator new(usz sz, Module* mod);
+    // Disallow creating expressions with no owner module.
+    void* operator new(usz sz) = delete;
 };
 
 struct Mov : public X86_Instruction {
@@ -60,6 +61,7 @@ struct Expr {
 
     Expr(Ty ty) : ty(ty) {}
     virtual ~Expr() = default;
+
     // Create an expression and bind it to its parent module.
     void* operator new(usz sz, Module* mod);
     // Disallow creating expressions with no owner module.
