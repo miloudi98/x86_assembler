@@ -11,11 +11,11 @@ const utils::StringMap<X86_Instruction::Ty> x86_mnemonics = {
     {"mov", X86_Instruction::Ty::Mov},
 };
 
-const utils::StringMap<core::Bit_Width> bit_widths = {
-    {"b8", core::Bit_Width::B8},
-    {"b16", core::Bit_Width::B16},
-    {"b32", core::Bit_Width::B32},
-    {"b64", core::Bit_Width::B64},
+const utils::StringMap<core::Operand_Size> bit_widths = {
+    {"b8", core::Operand_Size::B8},
+    {"b16", core::Operand_Size::B16},
+    {"b32", core::Operand_Size::B32},
+    {"b64", core::Operand_Size::B64},
 };
 
 const utils::StringMap<core::Register::Id> x86_registers = {
@@ -218,7 +218,7 @@ auto Parser::ParseX86Operand() -> core::Operand {
                 // Always use 64-bit addressing. Support for 32-bit addressing may come 
                 // in the future. I believe 32-bit addressing modes only require a certain
                 // prefix added to the instruction.
-                base_reg.emplace(core::Register(ParseX86Register(), core::Bit_Width::B64));
+                base_reg.emplace(core::Register(ParseX86Register(), core::Operand_Size::B64));
             }
             dbg::Assert(Consume(Tok::Ty::Rbracket));
 
@@ -235,7 +235,7 @@ auto Parser::ParseX86Operand() -> core::Operand {
                 dbg::Assert(Consume(Tok::Ty::Rbracket));
                 dbg::Assert(Consume(Tok::Ty::Lbracket));
 
-                index_reg.emplace(core::Register(ParseX86Register(), core::Bit_Width::B64));
+                index_reg.emplace(core::Register(ParseX86Register(), core::Operand_Size::B64));
                 dbg::Assert(Consume(Tok::Ty::Rbracket));
             }
 

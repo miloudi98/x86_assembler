@@ -18,13 +18,13 @@ struct MovAssemblerTest : public ::testing::Test {
     }
 };
 
-const Register rax = Register(Register::Id::Rax, Bit_Width::B64);
-const Register eax = Register(Register::Id::Rax, Bit_Width::B32);
-const Register al = Register(Register::Id::Rax, Bit_Width::B8);
-const Register rbx = Register(Register::Id::Rbx, Bit_Width::B64);
-const Register r8 = Register(Register::Id::R8, Bit_Width::B64);
-const Register r12 = Register(Register::Id::R12, Bit_Width::B64);
-const Register r8d = Register(Register::Id::R8, Bit_Width::B32);
+const Register rax = Register(Register::Id::Rax, Operand_Size::B64);
+const Register eax = Register(Register::Id::Rax, Operand_Size::B32);
+const Register al = Register(Register::Id::Rax, Operand_Size::B8);
+const Register rbx = Register(Register::Id::Rbx, Operand_Size::B64);
+const Register r8 = Register(Register::Id::R8, Operand_Size::B64);
+const Register r12 = Register(Register::Id::R12, Operand_Size::B64);
+const Register r8d = Register(Register::Id::R8, Operand_Size::B32);
 
 TEST_F(MovAssemblerTest, Mov_Register_To_Register) {
     // The dissasembly is taken from https://defuse.ca/online-x86-assembler.htm.
@@ -44,41 +44,41 @@ TEST_F(MovAssemblerTest, Mov_Register_To_Register) {
 TEST_F(MovAssemblerTest, Mov_Mem_Ref_To_Register) {
     Mem_Ref mem_ref_rsp;
     mem_ref_rsp.kind = Mem_Ref::Kind::Base_Maybe_Disp;
-    mem_ref_rsp.base = Register(Register::Id::Rsp, Bit_Width::B64);
-    mem_ref_rsp.size = Bit_Width::B64;
+    mem_ref_rsp.base = Register(Register::Id::Rsp, Operand_Size::B64);
+    mem_ref_rsp.size = Operand_Size::B64;
 
     Mem_Ref mem_ref_rbp;
     mem_ref_rbp.kind = Mem_Ref::Kind::Base_Maybe_Disp;
-    mem_ref_rbp.base = Register(Register::Id::Rbp, Bit_Width::B64);
-    mem_ref_rbp.size = Bit_Width::B64;
+    mem_ref_rbp.base = Register(Register::Id::Rbp, Operand_Size::B64);
+    mem_ref_rbp.size = Operand_Size::B64;
 
     Mem_Ref mem_ref_rsp_disp;
     mem_ref_rsp_disp.kind = Mem_Ref::Kind::Base_Maybe_Disp;
-    mem_ref_rsp_disp.base = Register(Register::Id::Rsp, Bit_Width::B64);
-    mem_ref_rsp_disp.size = Bit_Width::B64;
+    mem_ref_rsp_disp.base = Register(Register::Id::Rsp, Operand_Size::B64);
+    mem_ref_rsp_disp.size = Operand_Size::B64;
     mem_ref_rsp_disp.disp = 0x11223344;
 
     Mem_Ref mem_ref_rsp_negative_disp32;
     mem_ref_rsp_negative_disp32.kind = Mem_Ref::Kind::Base_Maybe_Disp;
-    mem_ref_rsp_negative_disp32.base = Register(Register::Id::Rsp, Bit_Width::B64);
-    mem_ref_rsp_negative_disp32.size = Bit_Width::B64;
+    mem_ref_rsp_negative_disp32.base = Register(Register::Id::Rsp, Operand_Size::B64);
+    mem_ref_rsp_negative_disp32.size = Operand_Size::B64;
     mem_ref_rsp_negative_disp32.disp = -0x11223344;
 
     Mem_Ref mem_ref_rsp_negative_disp8;
     mem_ref_rsp_negative_disp8.kind = Mem_Ref::Kind::Base_Maybe_Disp;
-    mem_ref_rsp_negative_disp8.base = Register(Register::Id::Rsp, Bit_Width::B64);
-    mem_ref_rsp_negative_disp8.size = Bit_Width::B64;
+    mem_ref_rsp_negative_disp8.base = Register(Register::Id::Rsp, Operand_Size::B64);
+    mem_ref_rsp_negative_disp8.size = Operand_Size::B64;
     mem_ref_rsp_negative_disp8.disp = -0x11;
 
     Mem_Ref mem_ref_rip_base;
     mem_ref_rip_base.kind = Mem_Ref::Kind::Base_Maybe_Disp;
-    mem_ref_rip_base.base = Register(Register::Id::Rip, Bit_Width::B64);
-    mem_ref_rip_base.size = Bit_Width::B64;
+    mem_ref_rip_base.base = Register(Register::Id::Rip, Operand_Size::B64);
+    mem_ref_rip_base.size = Operand_Size::B64;
     mem_ref_rip_base.disp = -0x11;
 
     Mem_Ref mem_ref_disp_only;
     mem_ref_disp_only.kind = Mem_Ref::Kind::Disp_Only;
-    mem_ref_disp_only.size = Bit_Width::B64;
+    mem_ref_disp_only.size = Operand_Size::B64;
     mem_ref_disp_only.disp = 0x11223344;
 
     // The dissasembly is taken from https://defuse.ca/online-x86-assembler.htm.

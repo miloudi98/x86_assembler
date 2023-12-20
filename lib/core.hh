@@ -8,8 +8,7 @@
 
 namespace fiska::core {
 
-// FIXME: Change the name to `Operand_Size`.
-enum struct Bit_Width : i32 {
+enum struct Operand_Size : i32 {
     Invalid = -1,
 
     B8 = 8,
@@ -54,10 +53,10 @@ struct Register {
     };
 
     Id id = Id::Invalid;
-    Bit_Width size = Bit_Width::Invalid;
+    Operand_Size size = Operand_Size::Invalid;
 
     Register() {}
-    Register(Id id, Bit_Width size) : id(id), size(size) {}
+    Register(Id id, Operand_Size size) : id(id), size(size) {}
     auto Index() const -> u8 { return +id & 0x7; }
     auto RequiresExtension() const -> bool { return +id >= +Id::R8 and +id <= +Id::R15; }
 };
@@ -84,7 +83,7 @@ struct Mem_Ref {
     Opt<Scale> scale = std::nullopt;
     Opt<Register> index = std::nullopt;
     Opt<i64> disp = std::nullopt;
-    Bit_Width size = Bit_Width::Invalid;
+    Operand_Size size = Operand_Size::Invalid;
 
     Mem_Ref() {}
     Mem_Ref(
@@ -93,7 +92,7 @@ struct Mem_Ref {
         Opt<Scale> scale,
         Opt<Register> index,
         Opt<i64> disp,
-        Bit_Width size 
+        Operand_Size size 
     ) : kind(kind), base(base), scale(scale),
     index(index), disp(disp), size(size) {}
 };
@@ -358,22 +357,22 @@ struct Assembler {
         out.push_back((qword >> 56) & 0xff);
     }
     
-    auto EmitSized(u64 qword, Bit_Width size) -> void {
+    auto EmitSized(u64 qword, Operand_Size size) -> void {
         switch (size) {
-        case Bit_Width::B8:
+        case Operand_Size::B8:
             Emit8(static_cast<u8>(qword));
             break;
-        case Bit_Width::B16:
+        case Operand_Size::B16:
             Emit16(static_cast<u16>(qword));
             break;
-        case Bit_Width::B32:
+        case Operand_Size::B32:
             Emit32(static_cast<u32>(qword));
             break;
-        case Bit_Width::B64:
+        case Operand_Size::B64:
             Emit64(static_cast<u64>(qword));
             break;
 
-        case Bit_Width::Invalid:
+        case Operand_Size::Invalid:
             dbg::Unreachable();
         } // switch
     }
@@ -420,7 +419,7 @@ struct Assembler {
         // MOV r/m32, r32
         // MOV r/m64, r64
         if (dst.IsRegisterOrMemRef() and src.IsRegister()) {
-            u8 op_code = 0x89 - (src.As<Register>().size == Bit_Width::B8);
+            u8 op_code = 0x89 - (src.As<Register>().size == Operand_Size::B8);
 
             Rex rex {
                 .b = dst.IsMemRef() 
@@ -428,7 +427,7 @@ struct Assembler {
                     : dst.As<Register>().RequiresExtension(),
                 .x = dst.IsMemRef() and dst.As<Mem_Ref>().index and dst.As<Mem_Ref>().index->RequiresExtension(),
                 .r = src.As<Register>().RequiresExtension(),
-                .w = src.As<Register>().size == Bit_Width::B64
+                .w = src.As<Register>().size == Operand_Size::B64
             };
 
             auto mod_rm_builder = Mod_Rm_Builder()
@@ -450,7 +449,7 @@ struct Assembler {
         // MOV r32, r/m32
         // MOV r64, r/m64
         else if (dst.IsRegister() and src.IsRegisterOrMemRef()) {
-            u8 op_code = 0x8b - (dst.As<Register>().size == Bit_Width::B8);
+            u8 op_code = 0x8b - (dst.As<Register>().size == Operand_Size::B8);
 
             Rex rex {
                 .b = src.IsMemRef() 
@@ -458,7 +457,7 @@ struct Assembler {
                     : src.As<Register>().RequiresExtension(),
                 .x = src.IsMemRef() and src.As<Mem_Ref>().index and src.As<Mem_Ref>().index->RequiresExtension(),
                 .r = dst.As<Register>().RequiresExtension(),
-                .w = dst.As<Register>().size == Bit_Width::B64
+                .w = dst.As<Register>().size == Operand_Size::B64
             };
 
             auto mod_rm_builder = Mod_Rm_Builder()
@@ -489,16 +488,16 @@ struct Assembler {
 
             u8 op_code = [&] {
                 if (dst.IsRegister()) {
-                    return u8(0xa1 - (reg.size == Bit_Width::B8));
+                    return u8(0xa1 - (reg.size == Operand_Size::B8));
                 }
-                return u8(0xa3 - (reg.size == Bit_Width::B8));
+                return u8(0xa3 - (reg.size == Operand_Size::B8));
             }();
 
             Rex rex {
                 .b = 0,
                 .x = 0,
                 .r = 0,
-                .w = reg.size == Bit_Width::B64
+                .w = reg.size == Operand_Size::B64
             };
 
             if (rex.IsRequired()) { Emit8(rex.raw); }
@@ -512,13 +511,13 @@ struct Assembler {
         // MOV r32, Imm32
         // MOV r64, Imm64
         else if (dst.IsRegister() and src.IsImm()) {
-            u8 op_code = dst.As<Register>().size == Bit_Width::B8 ? 0xb0 : 0xb8;
+            u8 op_code = dst.As<Register>().size == Operand_Size::B8 ? 0xb0 : 0xb8;
 
             Rex rex {
                 .b = dst.As<Register>().RequiresExtension(),
                 .x = 0,
                 .r = 0,
-                .w = dst.As<Register>().size == Bit_Width::B64
+                .w = dst.As<Register>().size == Operand_Size::B64
             };
 
             // Implementation of the +rb part of the opcode.
@@ -535,7 +534,7 @@ struct Assembler {
         // MOV r/m32, Imm32
         // MOV r/m64, Imm64
         else if (dst.IsMemRef() and src.IsImm()) {
-            u8 op_code = 0xc7 - (dst.As<Mem_Ref>().size == Bit_Width::B8);
+            u8 op_code = 0xc7 - (dst.As<Mem_Ref>().size == Operand_Size::B8);
 
             const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
 
@@ -543,7 +542,7 @@ struct Assembler {
                 .b = mem_ref.base and mem_ref.base->RequiresExtension(),
                 .x = mem_ref.index and mem_ref.index->RequiresExtension(),
                 .r = 0,
-                .w = mem_ref.size == Bit_Width::B64
+                .w = mem_ref.size == Operand_Size::B64
             };
 
             auto mod_rm_builder = Mod_Rm_Builder()
