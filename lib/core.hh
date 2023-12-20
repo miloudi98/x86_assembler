@@ -114,6 +114,13 @@ struct Imm {
     auto ToI64() const -> i64 { return inner; }
 };
 
+namespace operand {
+
+template <typename T>
+concept IsInnerType = IsAnyOf<T, Register, Mem_Ref, M_Offs, Imm>;
+
+}  // namespace operand
+
 struct Operand {
     using Inner = std::variant<
         std::monostate,
@@ -132,11 +139,14 @@ struct Operand {
     auto IsMoffs() const -> bool { return std::holds_alternative<M_Offs>(inner); }
     auto IsImm() const -> bool { return std::holds_alternative<Imm>(inner); }
 
+    template <typename... Ts>
+    requires (operand::IsInnerType<Ts> and ...)
+    constexpr bool Is() const { return (std::holds_alternative<Ts>(inner) or ...); }
 
-    template <typename T>
+    template <operand::IsInnerType T>
     auto As() -> T& { return std::get<T>(inner); }
 
-    template <typename T>
+    template <operand::IsInnerType T>
     auto As() const -> const T& { return std::get<T>(inner); }
 };
 
@@ -217,7 +227,7 @@ struct Mod_Rm_Builder {
     GCC_DIAG_IGNORE_POP();
 
     auto SetMod(const Operand& dst, const Operand& src) -> Mod_Rm_Builder& {
-        dbg::Assert(dst.IsRegisterOrMemRef() and src.IsRegisterOrMemRef(),
+        dbg::Assert(dst.Is<Register, Mem_Ref>() and src.Is<Register, Mem_Ref>(),
                 "|dst| or |src| are neither a Register nor a Mem_Ref");
 
         if (dst.IsRegister() and src.IsRegister()) {

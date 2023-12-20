@@ -45,6 +45,10 @@ using Opt = std::optional<T>;
 
 namespace fs = std::filesystem;
 
+// Useful concepts
+template <typename T, typename... OtherTs>
+concept IsAnyOf = (std::same_as<T, OtherTs> or ...);
+
 namespace dbg {
 
 auto PrintStackTrace() -> void;
