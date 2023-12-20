@@ -88,6 +88,10 @@ auto StringToI64(std::string_view str) -> Opt<i64> {
     return static_cast<i64>(ret);
 }
 
+constexpr auto IsValidMemRefScale(i64 scale) -> bool {
+    return (scale >= 0) and (scale & (scale - 1)) == 0 and scale <= 8;
+}
+
 }  // namespace
 
 void* Expr::operator new(usz sz, Module* mod) {
@@ -103,11 +107,8 @@ void* X86_Instruction::operator new(usz sz, Module* mod) {
 }
 
 auto Parser::ParseProcDecl() -> ProcDecl* {
-    dbg::Assert(Consume(Tok::Ty::Fn),
-            "Missing 'fn' keyword when parsing a procedure decl");
-
-    dbg::Assert(At(Tok::Ty::Ident),
-            "Expected an identifier after the 'fn' keyword");
+    dbg::Assert(Consume(Tok::Ty::Fn));
+    dbg::Assert(At(Tok::Ty::Ident));
 
     std::string name = lxr.tok.str;
     Consume(Tok::Ty::Ident);
@@ -118,16 +119,14 @@ auto Parser::ParseProcDecl() -> ProcDecl* {
 }
 
 auto Parser::ParseBlockExpr() -> BlockExpr* {
-    dbg::Assert(Consume(Tok::Ty::Lbrace),
-            "Expected a '{{' at the begining of a block expression!");
+    dbg::Assert(Consume(Tok::Ty::Lbrace));
 
     Vec<X86_Instruction*> x86_instrs;
     while (At(Tok::Ty::Ident)) {
         x86_instrs.push_back(ParseX86Instruction());
     }
 
-    dbg::Assert(Consume(Tok::Ty::Rbrace),
-            "Expected a '}}' at the end of a block expression!");
+    dbg::Assert(Consume(Tok::Ty::Rbrace));
 
     return new (mod) BlockExpr(x86_instrs);
 }
@@ -135,22 +134,21 @@ auto Parser::ParseBlockExpr() -> BlockExpr* {
 auto Parser::ParseX86Instruction() -> X86_Instruction* {
     using Ty = X86_Instruction::Ty;
 
-    dbg::Assert(x86_mnemonics.contains(lxr.tok.str),
-            "Encountered an unknown x86 instruction: '{}'", lxr.tok.str);
-
+    dbg::Assert(x86_mnemonics.contains(lxr.tok.str));
     auto mnemonic = x86_mnemonics.find(lxr.tok.str)->second;
     Consume(Tok::Ty::Ident);
 
     switch (mnemonic) {
     case Ty::Mov: {
-        dbg::Assert(Consume(Tok::Ty::Lparen), "Expected a '(' after an x86 instruction");
+        dbg::Assert(Consume(Tok::Ty::Lparen));
+
         auto dst = ParseX86Operand();
-        dbg::Assert(Consume(Tok::Ty::Comma), "Expected a ',' after operand");
+
+        dbg::Assert(Consume(Tok::Ty::Comma));
         auto src = ParseX86Operand();
 
-        dbg::Assert(Consume(Tok::Ty::Rparen),
-                "Expected a ')' after the second operand of a mov instruction");
-        dbg::Assert(Consume(Tok::Ty::SemiColon), "Expected a ';' after a mov instruction");
+        dbg::Assert(Consume(Tok::Ty::Rparen));
+        dbg::Assert(Consume(Tok::Ty::SemiColon));
 
         return new (mod) Mov(dst, src);
     }
@@ -164,11 +162,9 @@ auto Parser::ParseX86Instruction() -> X86_Instruction* {
 
 auto Parser::ParseX86Operand() -> core::Operand {
     auto ParseX86Register = [&]() {
-        dbg::Assert(At(Tok::Ty::Register),
-                "Expected a register operand after an operand size");
+        dbg::Assert(At(Tok::Ty::Register));
 
-        dbg::Assert(x86_registers.contains(lxr.tok.str),
-                "Encountered an unkown x86 register: '{}'", lxr.tok.str);
+        dbg::Assert(x86_registers.contains(lxr.tok.str));
 
         auto reg_id = x86_registers.find(lxr.tok.str)->second;
         Consume(Tok::Ty::Register);
@@ -176,8 +172,7 @@ auto Parser::ParseX86Operand() -> core::Operand {
     };
 
     auto ParseBitWidth = [&]() {
-        dbg::Assert(bit_widths.contains(lxr.tok.str),
-                "Encountered an unknown register size: '{}'", lxr.tok.str);
+        dbg::Assert(bit_widths.contains(lxr.tok.str));
         auto bit_width = bit_widths.find(lxr.tok.str)->second;
         Consume(Tok::Ty::Bsize);
         return bit_width;
@@ -207,12 +202,11 @@ auto Parser::ParseX86Operand() -> core::Operand {
         Opt<core::Mem_Ref::Scale> scale{std::nullopt};
         Opt<i64> mem_ref_disp{std::nullopt};
 
-        dbg::Assert(At(Tok::Ty::Lbracket, Tok::Ty::Num), "Expected either a '[' or an absolute displacement");
+        dbg::Assert(At(Tok::Ty::Lbracket, Tok::Ty::Num));
 
         if (At(Tok::Ty::Lbracket)) {
             Consume(Tok::Ty::Lbracket);
-            dbg::Assert(At(Tok::Ty::Register, Tok::Ty::Rbracket),
-                    "Expected a base register field or an empty field");
+            dbg::Assert(At(Tok::Ty::Register, Tok::Ty::Rbracket));
 
             if (At(Tok::Ty::Register)) {
                 // Always use 64-bit addressing. Support for 32-bit addressing may come 
@@ -220,29 +214,23 @@ auto Parser::ParseX86Operand() -> core::Operand {
                 // prefix added to the instruction.
                 base_reg.emplace(core::Register(ParseX86Register(), core::Bit_Width::B64));
             }
-            dbg::Assert(Consume(Tok::Ty::Rbracket), "Expected ']' after the base register");
+            dbg::Assert(Consume(Tok::Ty::Rbracket));
 
             // Optional scale and index fields.
             if (At(Tok::Ty::Lbracket)) {
                 Consume(Tok::Ty::Lbracket);
-                dbg::Assert(At(Tok::Ty::Num),
-                        "Expected a number in the scale field of a memory reference, found: '{}'. "
-                        "If you don't expect to use a scaled index, try ommiting the brackets like so:\n"
-                        "mov(b64 rax, @b64 [rax] + 0xdeadbeef);",
-                        lxr.tok.str);
+                dbg::Assert(At(Tok::Ty::Num));
 
-                // FIXME: check if the parsed number is a valid memory ref scale.
-                scale.emplace(core::Mem_Ref::Scale(StringToI64(lxr.tok.str).value()));
+                Opt<i64> parsed_scale = StringToI64(lxr.tok.str);
+                dbg::Assert(parsed_scale and IsValidMemRefScale(*parsed_scale));
+                scale.emplace(core::Mem_Ref::Scale(parsed_scale.value()));
                 Consume(Tok::Ty::Num);
 
-                dbg::Assert(Consume(Tok::Ty::Rbracket), "Missing ']' after the scale field");
-
-                dbg::Assert(Consume(Tok::Ty::Lbracket),
-                        "Expected the index field to be present when "
-                        "a scale is already defined");
+                dbg::Assert(Consume(Tok::Ty::Rbracket));
+                dbg::Assert(Consume(Tok::Ty::Lbracket));
 
                 index_reg.emplace(core::Register(ParseX86Register(), core::Bit_Width::B64));
-                dbg::Assert(Consume(Tok::Ty::Rbracket), "Missing ']' after the index field");
+                dbg::Assert(Consume(Tok::Ty::Rbracket));
             }
 
             // Optional displacement.
@@ -252,7 +240,7 @@ auto Parser::ParseX86Operand() -> core::Operand {
                     buf += lxr.tok.str;
 
                     Consume(Tok::Ty::Plus, Tok::Ty::Minus);
-                    dbg::Assert(At(Tok::Ty::Num), "Expected a number after a '+' or '-' sign");
+                    dbg::Assert(At(Tok::Ty::Num));
 
                     buf += lxr.tok.str;
                     Consume(Tok::Ty::Num);
@@ -260,16 +248,13 @@ auto Parser::ParseX86Operand() -> core::Operand {
                     return StringToI64(buf);
                 }();
 
-                dbg::Assert(disp.has_value(), "Invalid number used a displacement");
                 mem_ref_disp.emplace(disp.value());
             }
-        // Displacement only
+        // Displacement only. Must be a positive address.
         } else {
-            dbg::Assert(At(Tok::Ty::Num), "Expected a displacement after the operand size.");
+            dbg::Assert(At(Tok::Ty::Num));
 
             Opt<i64> disp = StringToI64(lxr.tok.str);
-            dbg::Assert(disp.has_value(), "Invalid number used a displacement");
-
             mem_ref_disp.emplace(disp.value());
         }
 
@@ -312,12 +297,12 @@ auto Parser::ParseX86Operand() -> core::Operand {
             buf += lxr.tok.str;
             Consume(Tok::Ty::Plus, Tok::Ty::Minus);
         }
-        dbg::Assert(At(Tok::Ty::Num), "Expected a number after a '+' or a '-'");
+        dbg::Assert(At(Tok::Ty::Num));
         buf += lxr.tok.str;
         Consume(Tok::Ty::Num);
 
         Opt<i64> imm = StringToI64(buf);
-        dbg::Assert(imm.has_value(), "Invalid number provided as an Imm");
+        dbg::Assert(imm.has_value());
         return core::Operand(core::Imm(imm.value()));
     }
 
