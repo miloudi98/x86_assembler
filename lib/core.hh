@@ -388,8 +388,9 @@ struct Assembler {
             case Mod_Rm_Builder::kMod_Mem_Transfer: {
                 // If Rip is the base of a memory reference then it is required to have
                 // a 32-bit displacement following the Mod_Rm and Sib byte.
-                if (mem_ref.base 
-                        and mem_ref.base->id == Register::Id::Rip) {
+                if ((mem_ref.base and mem_ref.base->id == Register::Id::Rip)
+                   or (mem_ref.kind == Mem_Ref::Kind::Disp_Only))
+                {
                     Emit32(u32(mem_ref.disp.value_or(0)));
                 }
                 break;

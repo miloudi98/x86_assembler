@@ -76,6 +76,11 @@ TEST_F(MovAssemblerTest, Mov_Mem_Ref_To_Register) {
     mem_ref_rip_base.size = Bit_Width::B64;
     mem_ref_rip_base.disp = -0x11;
 
+    Mem_Ref mem_ref_disp_only;
+    mem_ref_disp_only.kind = Mem_Ref::Kind::Disp_Only;
+    mem_ref_disp_only.size = Bit_Width::B64;
+    mem_ref_disp_only.disp = 0x11223344;
+
     // The dissasembly is taken from https://defuse.ca/online-x86-assembler.htm.
     EXPECT_THAT(Mov(rbx, mem_ref_rsp), ::testing::ElementsAreArray({0x48, 0x8b, 0x1c, 0x24}));
     EXPECT_THAT(Mov(rbx, mem_ref_rbp), ::testing::ElementsAreArray({0x48, 0x8b, 0x5d, 0x00}));
@@ -83,6 +88,7 @@ TEST_F(MovAssemblerTest, Mov_Mem_Ref_To_Register) {
     EXPECT_THAT(Mov(rbx, mem_ref_rsp_negative_disp32), ::testing::ElementsAreArray({0x48, 0x8b, 0x9c, 0x24, 0xbc, 0xcc, 0xdd, 0xee}));
     EXPECT_THAT(Mov(rbx, mem_ref_rsp_negative_disp8), ::testing::ElementsAreArray({0x48, 0x8b, 0x5c, 0x24, 0xef}));
     EXPECT_THAT(Mov(rbx, mem_ref_rip_base), ::testing::ElementsAreArray({0x48, 0x8b, 0x1d, 0xef, 0xff, 0xff, 0xff}));
+    EXPECT_THAT(Mov(rbx, mem_ref_disp_only), ::testing::ElementsAreArray({0x48, 0x8b, 0x1c, 0x25, 0x44, 0x33, 0x22, 0x11}));
 }
 
 TEST_F(MovAssemblerTest, Mov_Imm_To_Reg) {
