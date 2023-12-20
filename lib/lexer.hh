@@ -75,19 +75,14 @@ struct Lexer {
     u64 foffset{};
     u16 fid{};
     Tok tok{};
+    char lastc{};
 
     Lexer(fsm::File& file);
 
     auto SpellingView(u64 offset, u32 len) -> std::string_view;
-    auto NextChar(bool ignore_whitespace = false) -> Opt<char>;
-    auto NextCharRaw() -> Opt<char> { 
-        return NextChar(/*ignore_whitespace=*/false);
-    }
-
-    auto PeekChar(u32 n = 0, bool ignore_whitespace = false) -> Opt<char>;
-    auto PeekCharRaw(u32 n = 0, bool ignore_whitespace = false) -> Opt<char> {
-        return PeekChar(n, /*ignore_whitespace=*/false);
-    }
+    auto NextChar() -> void;
+    auto PeekChar(u32 n = 0) -> Opt<char>;
+    auto SkipWhiteSpace() -> void;
 
     auto IsEof() const -> bool { return foffset >= chars.size(); }
     auto NextTok() -> void;

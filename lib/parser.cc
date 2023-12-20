@@ -94,6 +94,11 @@ constexpr auto IsValidMemRefScale(i64 scale) -> bool {
 
 }  // namespace
 
+Module::~Module() {
+    for (Expr* e : exprs) { delete e; }
+    for (X86_Instruction* instr : x86_instrs) { delete instr; }
+}
+
 void* Expr::operator new(usz sz, Module* mod) {
     auto ptr = static_cast<Expr*>(::operator new(sz));
     mod->exprs.push_back(ptr);
@@ -134,6 +139,7 @@ auto Parser::ParseBlockExpr() -> BlockExpr* {
 auto Parser::ParseX86Instruction() -> X86_Instruction* {
     using Ty = X86_Instruction::Ty;
 
+    dbg::Assert(At(Tok::Ty::Ident));
     dbg::Assert(x86_mnemonics.contains(lxr.tok.str));
     auto mnemonic = x86_mnemonics.find(lxr.tok.str)->second;
     Consume(Tok::Ty::Ident);

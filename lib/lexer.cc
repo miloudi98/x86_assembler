@@ -17,11 +17,14 @@ namespace {
 // \r: Carriage return.
 // \f: Form feed.
 // \v: vertical tab.
+// \a: terminal ring bell.
+// \b: backspace.
+// ' ': regular space.
 constexpr auto IsWhiteSpace(char c) -> bool {
     return c == '\n' or c == '\t'
         or c == '\f' or c == '\a'
         or c == '\r' or c == '\v'
-        or c == '\b';
+        or c == '\b' or c == ' ';
 }
 
 constexpr auto IsDigit(char c) -> bool {
@@ -69,53 +72,43 @@ const ::utils::StringMap<Tok::Ty> keywords = {
 }  // namespace
 
 Lexer::Lexer(fsm::File& file) : chars(file.Content()), fid(file.fid) {
-    // Initialize member variable |tok|.
+    // Initialize first char and first tok.
+    NextChar();
     NextTok();
 }
 
-auto Lexer::NextChar(bool ignore_whitespace) -> Opt<char> {
-    if (IsEof()) { return std::nullopt; }
-
-    // FIXME: Ignoring whitespace here is probably a mistake that can lead
-    // to some hard to find bugs. Have an explicit function that ignores
-    // whitespace instead. Once that's done, remove functions |NextCharRaw|
-    // and |PeekCharRaw| as they will become useless.
-    while (not ignore_whitespace and not IsEof() and IsWhiteSpace(chars[foffset++])) {}
-
-    return NextChar();
+auto Lexer::NextChar() -> void {
+    if (IsEof()) {
+        lastc = 0;
+        return;
+    }
+    lastc = chars[foffset++];
 }
 
-auto Lexer::PeekChar(u32 n, bool ignore_whitespace) -> Opt<char> {
-    if (IsEof()) { return std::nullopt; }
+auto Lexer::PeekChar(u32 n) -> Opt<char> {
+    if (foffset + n >= chars.size()) {
+        return std::nullopt;
+    }
+    return chars[foffset + n];
+}
 
-    // Store the current offset.
-    u64 old_offset = foffset;
-
-    Opt<char> c = std::nullopt;
-    while (n--) { c = NextChar(ignore_whitespace); }
-
-    // Restore the foffset altered by the consecutive 
-    // calls to |NextChar|.
-    foffset = old_offset;
-    return c;
+auto Lexer::SkipWhiteSpace() -> void {
+    while (IsWhiteSpace(lastc)) {
+        NextChar();
+    }
 }
 
 auto Lexer::NextTok() -> void {
     tok.loc.offset = foffset;
 
-    Opt<char> c = NextChar();
-    if (not c) {
+    SkipWhiteSpace();
+
+    if (lastc == 0) {
         tok.ty = Tok::Ty::Eof;
         return;
     }
 
-    switch (*c) {
-    case ' ': {
-        // This is probably dangerous. A long sequence of whitespaces 
-        // may overflow the stack! Maybe TCO will come to the rescue?
-        NextTok();
-        break;
-    }
+    switch (lastc) {
     case ',': {
         tok.ty = Tok::Ty::Comma;
         break;
@@ -161,16 +154,14 @@ auto Lexer::NextTok() -> void {
         break;
     }
     case '/': {
-        dbg::Assert(PeekCharRaw().value() == '/',
-                "Foud character '/' that does not start a line comment!");
+        dbg::Assert(PeekChar().value() == '/');
         LexComment();
         NextTok();
         break;
     }
     case '0': {
         Opt<char> cc = PeekChar();
-        dbg::Assert(cc and not IsDigit(*cc),
-                "Leading zeros are not allowed in decimal numbers");
+        dbg::Assert(cc and not IsDigit(*cc));
 
         // Remove the '0x' prefix before lexing the hex digit.
         if (cc and *cc == 'x') {
@@ -178,7 +169,6 @@ auto Lexer::NextTok() -> void {
             NextChar();
             LexHexDigit();
             break;
-
         }
         [[fallthrough]];
     }
@@ -195,9 +185,7 @@ auto Lexer::NextTok() -> void {
         break;
     }
     default: {
-        dbg::Assert(IsIdentStart(*c),
-                "Attempting to create a token from "
-                "an unknwon character: '{}'", *c);
+        dbg::Assert(IsIdentStart(lastc));
 
         LexIdent();
         break;
@@ -218,27 +206,27 @@ auto Lexer::SpellingView(u64 offset, u32 len) -> std::string_view {
 }
 
 auto Lexer::LexComment() -> void {
-    while (PeekCharRaw().has_value() and *PeekCharRaw() != '\n') {
-        NextCharRaw();
+    while (PeekChar() and *PeekChar() != '\n') {
+        NextChar();
     }
 }
 
 auto Lexer::LexHexDigit() -> void {
     tok.ty = Tok::Ty::Num;
-    while (PeekChar().has_value() and IsHexDigit(*PeekChar())) {
+    while (PeekChar() and IsHexDigit(*PeekChar())) {
         NextChar();
     }
 }
 
 auto Lexer::LexDigit() -> void {
     tok.ty = Tok::Ty::Num;
-    while (PeekChar().has_value() and IsDigit(*PeekChar())) {
+    while (PeekChar() and IsDigit(*PeekChar())) {
         NextChar();
     }
 }
 
 auto Lexer::LexIdent() -> void {
-    while (PeekChar().has_value() and IsIdentCont(*PeekChar())) {
+    while (PeekChar() and IsIdentCont(*PeekChar())) {
         NextChar();
     }
     

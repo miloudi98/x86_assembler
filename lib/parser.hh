@@ -20,6 +20,8 @@ struct Module {
     Vec<X86_Instruction*> x86_instrs;
     // Module name.
     std::string name;
+
+    ~Module();
 };
 
 struct X86_Instruction {
