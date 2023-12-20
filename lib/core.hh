@@ -133,12 +133,6 @@ struct Operand {
 
     Operand(Inner op) : inner(op) {}
 
-    auto IsRegister() const -> bool { return std::holds_alternative<Register>(inner); }
-    auto IsMemRef() const -> bool { return std::holds_alternative<Mem_Ref>(inner); }
-    auto IsRegisterOrMemRef() const -> bool { return IsRegister() or IsMemRef(); }
-    auto IsMoffs() const -> bool { return std::holds_alternative<M_Offs>(inner); }
-    auto IsImm() const -> bool { return std::holds_alternative<Imm>(inner); }
-
     template <typename... Ts>
     requires (operand::IsInnerType<Ts> and ...)
     constexpr bool Is() const { return (std::holds_alternative<Ts>(inner) or ...); }
@@ -230,21 +224,21 @@ struct Mod_Rm_Builder {
         dbg::Assert(dst.Is<Register, Mem_Ref>() and src.Is<Register, Mem_Ref>(),
                 "|dst| or |src| are neither a Register nor a Mem_Ref");
 
-        if (dst.IsRegister() and src.IsRegister()) {
+        if (dst.Is<Register>() and src.Is<Register>()) {
             mod_rm.mod = kMod_Reg_Transfer;
             return *this;
         }
 
-        return SetMod(dst.IsMemRef() ? dst.As<Mem_Ref>() : src.As<Mem_Ref>());
+        return SetMod(dst.Is<Mem_Ref>() ? dst.As<Mem_Ref>() : src.As<Mem_Ref>());
     }
 
     GCC_DIAG_IGNORE_PUSH(-Wconversion)
     auto SetRmAndSib(const Operand& op) -> Mod_Rm_Builder& {
-        dbg::Assert(op.IsRegisterOrMemRef(), 
+        dbg::Assert(op.Is<Register, Mem_Ref>(), 
                 "Passing an operand other than a Register or a Mem_Ref to the Mod_Rm_Builder "
                 "to set the r/m and sib fields.");
 
-        if (op.IsRegister()) {
+        if (op.Is<Register>()) {
             mod_rm.rm = op.As<Register>().Index();
 
             return *this;
@@ -312,7 +306,7 @@ struct Mod_Rm_Builder {
 
     GCC_DIAG_IGNORE_PUSH(-Wconversion)
     auto SetReg(const Operand& op) -> Mod_Rm_Builder& {
-        dbg::Assert(op.IsRegister(),
+        dbg::Assert(op.Is<Register>(),
                 "Passing an operand that is not a Register to the Mod_Rm_Builder "
                 "to set the reg field");
 
@@ -428,14 +422,14 @@ struct Assembler {
         // MOV r/m16, r16
         // MOV r/m32, r32
         // MOV r/m64, r64
-        if (dst.IsRegisterOrMemRef() and src.IsRegister()) {
+        if (dst.Is<Register, Mem_Ref>() and src.Is<Register>()) {
             u8 op_code = 0x89 - (src.As<Register>().size == Operand_Size::B8);
 
             Rex rex {
-                .b = dst.IsMemRef() 
+                .b = dst.Is<Mem_Ref>() 
                     ? dst.As<Mem_Ref>().base and dst.As<Mem_Ref>().base->RequiresExtension()
                     : dst.As<Register>().RequiresExtension(),
-                .x = dst.IsMemRef() and dst.As<Mem_Ref>().index and dst.As<Mem_Ref>().index->RequiresExtension(),
+                .x = dst.Is<Mem_Ref>() and dst.As<Mem_Ref>().index and dst.As<Mem_Ref>().index->RequiresExtension(),
                 .r = src.As<Register>().RequiresExtension(),
                 .w = src.As<Register>().size == Operand_Size::B64
             };
@@ -450,7 +444,7 @@ struct Assembler {
             Emit8(mod_rm_builder.AsU8());
             if (mod_rm_builder.sib) { Emit8(mod_rm_builder.sib.value().raw); }
 
-            if (dst.IsMemRef()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, dst.As<Mem_Ref>()); }
+            if (dst.Is<Mem_Ref>()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, dst.As<Mem_Ref>()); }
         }
 
         // Instructions encoded:
@@ -458,14 +452,14 @@ struct Assembler {
         // MOV r16, r/m16
         // MOV r32, r/m32
         // MOV r64, r/m64
-        else if (dst.IsRegister() and src.IsRegisterOrMemRef()) {
+        else if (dst.Is<Register>() and src.Is<Register, Mem_Ref>()) {
             u8 op_code = 0x8b - (dst.As<Register>().size == Operand_Size::B8);
 
             Rex rex {
-                .b = src.IsMemRef() 
+                .b = src.Is<Mem_Ref>() 
                     ? src.As<Mem_Ref>().base and src.As<Mem_Ref>().base->RequiresExtension()
                     : src.As<Register>().RequiresExtension(),
-                .x = src.IsMemRef() and src.As<Mem_Ref>().index and src.As<Mem_Ref>().index->RequiresExtension(),
+                .x = src.Is<Mem_Ref>() and src.As<Mem_Ref>().index and src.As<Mem_Ref>().index->RequiresExtension(),
                 .r = dst.As<Register>().RequiresExtension(),
                 .w = dst.As<Register>().size == Operand_Size::B64
             };
@@ -480,7 +474,7 @@ struct Assembler {
             Emit8(mod_rm_builder.AsU8());
             if (mod_rm_builder.sib) { Emit8(mod_rm_builder.sib.value().raw); }
 
-            if (src.IsMemRef()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, src.As<Mem_Ref>()); }
+            if (src.Is<Mem_Ref>()) { EmitMemRefDisp(mod_rm_builder.mod_rm.mod, src.As<Mem_Ref>()); }
         }
 
         // Instructions encoded:
@@ -492,12 +486,12 @@ struct Assembler {
         // MOV moffs16, r16
         // MOV moffs32, r32
         // MOV moffs64, r64
-        else if ((dst.IsRegister() and src.IsMoffs()) or (dst.IsMoffs() and src.IsRegister())) {
-            const Register& reg = src.IsRegister() ? src.As<Register>() : dst.As<Register>();
-            const M_Offs& moffs = src.IsMoffs() ? src.As<M_Offs>() : dst.As<M_Offs>();
+        else if ((dst.Is<Register>() and src.Is<M_Offs>()) or (dst.Is<M_Offs>() and src.Is<Register>())) {
+            const Register& reg = src.Is<Register>() ? src.As<Register>() : dst.As<Register>();
+            const M_Offs& moffs = src.Is<M_Offs>() ? src.As<M_Offs>() : dst.As<M_Offs>();
 
             u8 op_code = [&] {
-                if (dst.IsRegister()) {
+                if (dst.Is<Register>()) {
                     return u8(0xa1 - (reg.size == Operand_Size::B8));
                 }
                 return u8(0xa3 - (reg.size == Operand_Size::B8));
@@ -520,7 +514,7 @@ struct Assembler {
         // MOV r16, Imm16
         // MOV r32, Imm32
         // MOV r64, Imm64
-        else if (dst.IsRegister() and src.IsImm()) {
+        else if (dst.Is<Register>() and src.Is<Imm>()) {
             u8 op_code = dst.As<Register>().size == Operand_Size::B8 ? 0xb0 : 0xb8;
 
             Rex rex {
@@ -543,7 +537,7 @@ struct Assembler {
         // MOV r/m16, Imm16
         // MOV r/m32, Imm32
         // MOV r/m64, Imm64
-        else if (dst.IsMemRef() and src.IsImm()) {
+        else if (dst.Is<Mem_Ref>() and src.Is<Imm>()) {
             u8 op_code = 0xc7 - (dst.As<Mem_Ref>().size == Operand_Size::B8);
 
             const Mem_Ref& mem_ref = dst.As<Mem_Ref>();
