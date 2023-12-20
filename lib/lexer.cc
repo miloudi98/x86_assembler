@@ -41,7 +41,7 @@ constexpr auto IsIdentStart(char c) -> bool {
 }
 
 constexpr auto IsIdentCont(char c) -> bool {
-    return std::isalpha(c) or IsDigit(c);
+    return std::isalpha(c) or IsDigit(c) or c == '_';
 }
 
 const ::utils::StringMap<Tok::Ty> keywords = {
@@ -92,16 +92,13 @@ auto Lexer::PeekChar(u32 n) -> Opt<char> {
     return chars[foffset + n];
 }
 
-auto Lexer::SkipWhiteSpace() -> void {
-    while (IsWhiteSpace(lastc)) {
-        NextChar();
-    }
-}
-
 auto Lexer::NextTok() -> void {
-    tok.loc.offset = foffset;
-
     SkipWhiteSpace();
+
+    // Since foffset is unsigned, make sure foffset >= 1 so that 
+    // foffset - 1 doesn't overflow.
+    dbg::Assert(foffset >= 1);
+    tok.loc.offset = foffset - 1;
 
     if (lastc == 0) {
         tok.ty = Tok::Ty::Eof;
@@ -110,63 +107,83 @@ auto Lexer::NextTok() -> void {
 
     switch (lastc) {
     case ',': {
+        NextChar();
         tok.ty = Tok::Ty::Comma;
         break;
     }
     case ':': {
+        NextChar();
         tok.ty = Tok::Ty::Colon;
         break;
     }
+    case ';': {
+        NextChar();
+        tok.ty = Tok::Ty::SemiColon;
+        break;
+    }
     case '(': {
+        NextChar();
         tok.ty = Tok::Ty::Lparen;
         break;
     }
     case ')': {
+        NextChar();
         tok.ty = Tok::Ty::Rparen;
         break;
     }
     case '{': {
+        NextChar();
         tok.ty = Tok::Ty::Lbrace;
         break;
     }
     case '}': {
+        NextChar();
         tok.ty = Tok::Ty::Rbrace;
         break;
     }
     case '[': {
+        NextChar();
         tok.ty = Tok::Ty::Lbracket;
         break;
     }
     case ']': {
+        NextChar();
         tok.ty = Tok::Ty::Rbracket;
         break;
     }
     case '@': {
+        NextChar();
         tok.ty = Tok::Ty::At;
         break;
     }
     case '+': {
+        NextChar();
         tok.ty = Tok::Ty::Plus;
         break;
     }
     case '-': {
+        NextChar();
         tok.ty = Tok::Ty::Minus;
         break;
     }
     case '/': {
-        dbg::Assert(PeekChar().value() == '/');
+        // Eat the first '/'
+        NextChar();
+        dbg::Assert(lastc == '/');
+        // Eat the second '/'
+        NextChar();
+
         LexComment();
-        NextTok();
-        break;
+        return NextTok();
     }
     case '0': {
         Opt<char> cc = PeekChar();
         dbg::Assert(cc and not IsDigit(*cc));
-
-        // Remove the '0x' prefix before lexing the hex digit.
         if (cc and *cc == 'x') {
-            // Pop the 'x' from the '0x' prefix.
+            // Remove the '0x' prefix before lexing the hex digit.
             NextChar();
+            NextChar();
+
             LexHexDigit();
             break;
         }
@@ -192,9 +209,9 @@ auto Lexer::NextTok() -> void {
     }
     }  // switch
 
-    tok.loc.len = u32(foffset - tok.loc.offset);
+    tok.loc.len = u32(foffset - tok.loc.offset - 1);
     tok.loc.fid = fid;
-    tok.str = SpellingView(foffset, tok.loc.len);
+    tok.str = SpellingView(tok.loc.offset, tok.loc.len);
 }
 
 auto Lexer::SpellingView(u64 offset, u32 len) -> std::string_view {
@@ -205,32 +222,38 @@ auto Lexer::SpellingView(u64 offset, u32 len) -> std::string_view {
     return chars.substr(offset, len);
 }
 
+auto Lexer::SkipWhiteSpace() -> void {
+    while (IsWhiteSpace(lastc)) {
+        NextChar();
+    }
+}
+
 auto Lexer::LexComment() -> void {
-    while (PeekChar() and *PeekChar() != '\n') {
+    while (lastc != '\n') {
         NextChar();
     }
 }
 
 auto Lexer::LexHexDigit() -> void {
     tok.ty = Tok::Ty::Num;
-    while (PeekChar() and IsHexDigit(*PeekChar())) {
+    while (IsHexDigit(lastc)) {
         NextChar();
     }
 }
 
 auto Lexer::LexDigit() -> void {
     tok.ty = Tok::Ty::Num;
-    while (PeekChar() and IsDigit(*PeekChar())) {
+    while (IsDigit(lastc)) {
         NextChar();
     }
 }
 
 auto Lexer::LexIdent() -> void {
-    while (PeekChar() and IsIdentCont(*PeekChar())) {
+    while (IsIdentCont(lastc)) {
         NextChar();
     }
     
-    std::string_view tok_str_view = SpellingView(tok.loc.offset, u32(foffset - tok.loc.offset));
+    std::string_view tok_str_view = SpellingView(tok.loc.offset, u32(foffset - tok.loc.offset - 1));
     if (auto ty = keywords.find(tok_str_view); ty != keywords.end()) {
         tok.ty = ty->second;
     } else {

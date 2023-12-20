@@ -18,6 +18,8 @@ const utils::StringMap<core::Operand_Size> bit_widths = {
     {"b64", core::Operand_Size::B64},
 };
 
+// FIXME: Add smaller registers to the mapping and make sure to
+// return a core::Register, not a core::Register::Id.
 const utils::StringMap<core::Register::Id> x86_registers = {
     {"rax", core::Register::Id::Rax},
     {"rcx", core::Register::Id::Rcx},
@@ -42,7 +44,10 @@ const utils::StringMap<core::Register::Id> x86_registers = {
 // Credit to llvm: https://llvm.org/doxygen/StringRef_8cpp_source.html
 auto StringToI64(std::string_view str) -> Opt<i64> {
     bool is_negative = str.starts_with('-');
-    str.remove_prefix(1);
+
+    if (str.starts_with('+') or str.starts_with('-')) {
+        str.remove_prefix(1);
+    }
 
     u8 radix = str.starts_with("0x") ? 16 : 10;
     if (radix == 16) { str.remove_prefix(2); }
@@ -111,7 +116,7 @@ void* X86_Instruction::operator new(usz sz, Module* mod) {
     return ptr;
 }
 
-auto Parser::ParseProcDecl() -> ProcDecl* {
+auto Parser::ParseProcExpr() -> ProcExpr* {
     dbg::Assert(Consume(Tok::Ty::Fn));
     dbg::Assert(At(Tok::Ty::Ident));
 
@@ -120,14 +125,14 @@ auto Parser::ParseProcDecl() -> ProcDecl* {
 
     auto block_expr = ParseBlockExpr();
 
-    return new (mod) ProcDecl(std::move(name), block_expr);
+    return new (mod) ProcExpr(std::move(name), block_expr);
 }
 
 auto Parser::ParseBlockExpr() -> BlockExpr* {
     dbg::Assert(Consume(Tok::Ty::Lbrace));
 
     Vec<X86_Instruction*> x86_instrs;
-    while (At(Tok::Ty::Ident)) {
+    while (not At(Tok::Ty::Rbrace)) {
         x86_instrs.push_back(ParseX86Instruction());
     }
 
@@ -262,6 +267,7 @@ auto Parser::ParseX86Operand() -> core::Operand {
 
             Opt<i64> disp = StringToI64(lxr.tok.str);
             mem_ref_disp.emplace(disp.value());
+            Consume(Tok::Ty::Num);
         }
 
         core::Mem_Ref::Kind mem_ref_kind = [&] {

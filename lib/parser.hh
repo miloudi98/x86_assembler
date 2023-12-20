@@ -77,11 +77,11 @@ struct BlockExpr : public Expr {
         : Expr(Expr::Ty::Block), exprs(std::move(exprs)) {}
 };
 
-struct ProcDecl : public Expr {
+struct ProcExpr : public Expr {
     std::string name;
     BlockExpr* body;
 
-    ProcDecl(std::string name, BlockExpr* body) 
+    ProcExpr(std::string name, BlockExpr* body) 
         : Expr(Expr::Ty::Proc), name(name), body(body) {}
 };
 
@@ -89,7 +89,9 @@ struct Parser {
     Lexer lxr;
     Module* mod{};
 
-    Parser(fsm::File& file) : lxr(Lexer(file)) {}
+    Parser(fsm::File& file) : lxr(Lexer(file)) {
+        mod = new Module();
+    }
 
     // Helper functions.
     auto At(std::same_as<Tok::Ty> auto... tok_tys) -> bool {
@@ -104,7 +106,7 @@ struct Parser {
         return false;
     }
 
-    auto ParseProcDecl() -> ProcDecl*;
+    auto ParseProcExpr() -> ProcExpr*;
     auto ParseBlockExpr() -> BlockExpr*;
     auto ParseX86Instruction() -> X86_Instruction*;
     auto ParseX86Operand() -> core::Operand;

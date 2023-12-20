@@ -64,7 +64,7 @@ struct Assert {
     explicit Assert(bool assertion,
             std::source_location loc = std::source_location::current())
     {
-        Assert(false, "", loc);
+        Assert(assertion, "", loc);
     }
 
     // Having an explicit multi-argument constructor disallows 
