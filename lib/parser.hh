@@ -71,10 +71,10 @@ struct Expr {
 };
 
 struct BlockExpr : public Expr {
-    Vec<X86_Instruction*> exprs;
+    Vec<X86_Instruction*> instructions;
 
-    BlockExpr(Vec<X86_Instruction*> exprs) 
-        : Expr(Expr::Ty::Block), exprs(std::move(exprs)) {}
+    BlockExpr(Vec<X86_Instruction*> instructions) 
+        : Expr(Expr::Ty::Block), instructions(std::move(instructions)) {}
 };
 
 struct ProcExpr : public Expr {
