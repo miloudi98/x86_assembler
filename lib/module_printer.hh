@@ -6,8 +6,23 @@
 
 namespace fiska::syntax::ast_printer {
 
+namespace {
+
 constexpr std::string_view bottom_left_corner = "\u2514\u2500";
 constexpr std::string_view vertical_right_with_continuation = "\u251c\u2500";
+
+auto GetTreePart(u32 indent_lvl, bool is_last_level) -> std::string {
+    // Check for overflow.
+    dbg::Assert(indent_lvl >= 1);
+    std::string spaces((indent_lvl - 1) << 1, ' ');
+
+    return fmt::format("{}{}", spaces,
+            is_last_level 
+            ? bottom_left_corner 
+            : vertical_right_with_continuation);
+}
+
+}  // namespace
 
 auto PrintOperand(const core::Operand& op) -> std::string {
     auto ColoredString = [&](std::string op, fmt::color color) {
@@ -42,15 +57,8 @@ auto PrintOperand(const core::Operand& op) -> std::string {
     dbg::Unreachable();
 }
 
-void Print(X86_Instruction* instruction, u32 indent_lvl, std::string& out, bool is_last_instruction = true) {
-    // Check for overflow.
-    dbg::Assert(indent_lvl >= 1);
-    std::string spaces((indent_lvl - 1) << 1, ' ');
-
-    out += fmt::format("{}{}", spaces,
-            is_last_instruction 
-            ? bottom_left_corner 
-            : vertical_right_with_continuation);
+void Print(X86_Instruction* instruction, u32 indent_lvl, std::string& out, bool is_last_level = true) {
+    out += GetTreePart(indent_lvl, is_last_level);
 
     switch (instruction->ty) {
     case X86_Instruction::Ty::Invalid: {
@@ -68,15 +76,8 @@ void Print(X86_Instruction* instruction, u32 indent_lvl, std::string& out, bool 
     } // switch
 }
 
-void Print(Expr* e, u32 indent_lvl, std::string& out, bool is_last_instruction = true) {
-    // Check for overflow.
-    // FIXME: Extract the logic of configuring the indentation and refactor that into 
-    // a separate function.
-    dbg::Assert(indent_lvl >= 1);
-    std::string spaces((indent_lvl - 1) << 1, ' ');
-    out += fmt::format("{}{}", spaces, is_last_instruction 
-            ? bottom_left_corner
-            : vertical_right_with_continuation);
+void Print(Expr* e, u32 indent_lvl, std::string& out, bool is_last_level = true) {
+    out += GetTreePart(indent_lvl, is_last_level);
 
     switch (e->ty) {
     case Expr::Ty::Invalid: {
