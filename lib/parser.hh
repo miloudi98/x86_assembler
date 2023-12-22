@@ -89,7 +89,11 @@ struct Parser {
     Lexer lxr;
     Module* mod{};
 
+    // FIXME: The file should be passed as a const reference. The parser should
+    // not mutate the file in any circumstance.
     Parser(fsm::File& file) : lxr(Lexer(file)) {
+        // FIXME: Creating the module here is fine for now but you need to 
+        // figure out its correct lifetime.
         mod = new Module();
     }
 
@@ -106,11 +110,11 @@ struct Parser {
         return false;
     }
 
+    static auto ParseFileIntoModule(fsm::File& file) -> Module*;
     auto ParseProcExpr() -> ProcExpr*;
     auto ParseBlockExpr() -> BlockExpr*;
     auto ParseX86Instruction() -> X86_Instruction*;
     auto ParseX86Operand() -> core::Operand;
-    auto ParseFile() -> Module*;
 };
 
 }  // namespace fiska::syntax

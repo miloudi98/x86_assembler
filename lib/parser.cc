@@ -323,4 +323,10 @@ auto Parser::ParseX86Operand() -> core::Operand {
     } // switch
 }
 
+auto Parser::ParseFileIntoModule(fsm::File& file) -> Module* {
+    Parser p{file};
+    while (not p.At(Tok::Ty::Eof)) { p.ParseProcExpr(); }
+    return p.mod;
+}
+
 }  // namespace fiska::syntax

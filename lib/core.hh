@@ -182,6 +182,8 @@ struct Mod_Rm_Builder {
                 ? kMod_Mem_Disp8_Transfer
                 : kMod_Mem_Disp32_Transfer;
         };
+        // TODO: Remove this immediately callable function.
+        // It's simply visual clutter.
         mod_rm.mod = [&] {
             switch (mem_ref.kind) {
             case Mem_Ref::Kind::Base_Maybe_Disp: {

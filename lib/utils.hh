@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <memory>
+#include <algorithm>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <optional>
@@ -44,6 +46,8 @@ template <typename T>
 using Opt = std::optional<T>;
 
 namespace fs = std::filesystem;
+namespace vws = std::views;
+namespace rgs = std::ranges;
 
 // Useful concepts
 template <typename T, typename... OtherTs>
