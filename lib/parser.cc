@@ -261,13 +261,17 @@ auto Parser::ParseX86Operand() -> core::Operand {
 
                 mem_ref_disp.emplace(disp.value());
             }
-        // Displacement only. Must be a positive address.
+        // Displacement only or a MOV r/m, moffs.
         } else {
             dbg::Assert(At(Tok::Ty::Num));
 
             Opt<i64> disp = StringToI64(lxr.tok.str);
             mem_ref_disp.emplace(disp.value());
             Consume(Tok::Ty::Num);
+
+            if (not utils::FitsInU32(disp.value())) {
+                return core::Operand(core::M_Offs(disp.value()));
+            }
         }
 
         core::Mem_Ref::Kind mem_ref_kind = [&] {

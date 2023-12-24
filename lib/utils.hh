@@ -155,6 +155,7 @@ template <typename T>
 using StringMap = std::unordered_map<std::string, T, StringHash, std::equal_to<>>;
 
 auto FitsInU8(i64 num) -> bool;
+auto FitsInU32(i64 num) -> bool;
 
 auto LoadFile(const fs::path& path) -> Vec<char>;
 

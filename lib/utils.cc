@@ -62,6 +62,11 @@ auto utils::FitsInU8(i64 num) -> bool {
     return num >= -128 and num <= 127;
 }
 
+auto utils::FitsInU32(i64 num) -> bool {
+    return num >= std::numeric_limits<i32>::min()
+        and num <= std::numeric_limits<i32>::max();
+}
+
 auto utils::LoadFile(const fs::path& path) -> Vec<char> {
     i32 fd = open(path.c_str(), O_RDONLY);
     dbg::Assert(fd >= 0,
