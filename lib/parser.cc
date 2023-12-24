@@ -66,11 +66,11 @@ auto StringToI64(std::string_view str) -> Opt<i64> {
         } else if (curr_str[0] >= 'A' and curr_str[0] <= 'Z') {
             ord = u8(curr_str[0] - 'A' + 10);
         } else {
-            return std::nullopt;
+            dbg::Unreachable("Invalid character '{}' encountered in a number", curr_str[0]);
         }
 
         if (ord >= radix) {
-            return std::nullopt;
+            dbg::Unreachable("Invalid number");
         }
 
         u64 old_ret = ret;
@@ -78,7 +78,7 @@ auto StringToI64(std::string_view str) -> Opt<i64> {
 
         // overflow detected.
         if ((ret / radix) < old_ret) {
-            return std::nullopt;
+            dbg::Unreachable("Number too big to fit in a u64");
         }
 
         curr_str.remove_prefix(1);
