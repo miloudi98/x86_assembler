@@ -38,12 +38,12 @@ struct Register {
     enum struct Id : i32 {
         Invalid = -1,
 
-        Rax = 0, R8 = 8,
-        Rcx = 1, R9 = 9,
-        Rdx = 2, R10 = 10,
-        Rbx = 3, R11 = 11,
-        Rsp = 4, R12 = 12,
-        Rbp = 5, R13 = 13,
+        Rax = 0, R8 = 8,   Es = 16,
+        Rcx = 1, R9 = 9,   Cs = 17,
+        Rdx = 2, R10 = 10, Ss = 18,
+        Rbx = 3, R11 = 11, Ds = 19,
+        Rsp = 4, R12 = 12, Fs = 20,
+        Rbp = 5, R13 = 13, Gs = 21,
         Rsi = 6, R14 = 14,
         Rdi = 7, R15 = 15,
         // The value 0x85 is intentionally selected to ensure that Rip.Index() returns 101.
@@ -59,6 +59,7 @@ struct Register {
     Register(Id id, Operand_Size size) : id(id), size(size) {}
     auto Index() const -> u8 { return +id & 0x7; }
     auto RequiresExtension() const -> bool { return +id >= +Id::R8 and +id <= +Id::R15; }
+    auto IsSegmentRegister() const -> bool { return +id >= +Id::Es and +id <= +Id::Gs; }
 };
 
 struct Mem_Ref {
@@ -382,8 +383,6 @@ struct Assembler {
     }
     GCC_DIAG_IGNORE_POP();
 
-    // Moving segment registers is not supported for now. We will implement it
-    // once the need for such an operation arises.
     auto mov(const Operand& dst, const Operand& src) -> void {
 
         auto EmitMemRefDisp = [&](u8 mod_rm_mod, const Mem_Ref& mem_ref) {
@@ -423,7 +422,12 @@ struct Assembler {
         // MOV r/m32, r32
         // MOV r/m64, r64
         if (dst.Is<Register, Mem_Ref>() and src.Is<Register>()) {
-            u8 op_code = 0x89 - (src.As<Register>().size == Operand_Size::B8);
+            u8 op_code = [&] {
+                if (src.As<Register>().IsSegmentRegister()) {
+                    return u8(0x8c);
+                }
+                return u8(0x89 - (src.As<Register>().size == Operand_Size::B8));
+            }();
 
             Rex rex {
                 .b = dst.Is<Mem_Ref>() 
@@ -453,7 +457,12 @@ struct Assembler {
         // MOV r32, r/m32
         // MOV r64, r/m64
         else if (dst.Is<Register>() and src.Is<Register, Mem_Ref>()) {
-            u8 op_code = 0x8b - (dst.As<Register>().size == Operand_Size::B8);
+            u8 op_code = [&] {
+                if (dst.As<Register>().IsSegmentRegister()) {
+                    return u8(0x8e);
+                }
+                return u8(0x8b - (dst.As<Register>().size == Operand_Size::B8));
+            }();
 
             Rex rex {
                 .b = src.Is<Mem_Ref>() 

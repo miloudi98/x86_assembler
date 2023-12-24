@@ -38,6 +38,12 @@ const utils::StringMap<core::Register::Id> x86_registers = {
     {"r13", core::Register::Id::R13},
     {"r14", core::Register::Id::R14},
     {"r15", core::Register::Id::R15},
+    {"es", core::Register::Id::Es},
+    {"cs", core::Register::Id::Cs},
+    {"ss", core::Register::Id::Ss},
+    {"ds", core::Register::Id::Ds},
+    {"fs", core::Register::Id::Fs},
+    {"gs", core::Register::Id::Gs},
 };
 
 
